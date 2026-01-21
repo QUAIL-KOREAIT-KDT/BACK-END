@@ -9,3 +9,9 @@ class WeatherService:
         # 3. 곰팡이 지수(안전~위험) 계산 [Source 3, 6]
         # 4. 알림 필요 여부 체크 [Source 8]
         pass
+
+    async def process_image(self, imgdata):
+        # 1. 이미지 디코딩 및 저장 [Source 6]
+        # 2. 이미지 전처리 및 모델 예측 호출 [Source 6]
+        # 3. 결과 반환 및 DB 저장 [Source 8]
+        pass

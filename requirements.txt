@@ -1,11 +1,11 @@
 # [QUAIL Project Dependency List]
-# ìµœì¢… ì—…ë°ì´íŠ¸: 2026.01.21 1000
-# ëŒ€ìƒ: EC2 t3a.medium (Ubuntu) & Local Dev Environment
+# ÃÖÁ¾ ¾÷µ¥ÀÌÆ®: 2026.01.21 1000
+# ´ë»ó: EC2 t3a.medium (Ubuntu) & Local Dev Environment
 
 # ==========================================
-# 1. ê³µí†µ ë° ë°±ì—”ë“œ í•„ìˆ˜ (Backend Core)
+# 1. °øÅë ¹× ¹é¿£µå ÇÊ¼ö (Backend Core)
 # ==========================================
-# ì›¹ í”„ë ˆì„ì›Œí¬ ë° ì„œë²„
+# À¥ ÇÁ·¹ÀÓ¿öÅ© ¹× ¼­¹ö
 # [1] Backend Core & API
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
@@ -37,41 +37,41 @@ tiktoken
 sentence-transformers
 
 # ==========================================
-# 2. ë°ì´í„°ë² ì´ìŠ¤ (Database)
+# 2. µ¥ÀÌÅÍº£ÀÌ½º (Database)
 # ==========================================
-# ORM ë° ë“œë¼ì´ë²„
+# ORM ¹× µå¶óÀÌ¹ö
 sqlalchemy>=2.0.0           # DB ORM
-aiomysql>=0.2.0             # MySQL ë¹„ë™ê¸° ë“œë¼ì´ë²„ (Async)
-mysqlclient>=2.2.0                # (Optional) ë¡œì»¬ í…ŒìŠ¤íŠ¸ìš©
+aiomysql>=0.2.0             # MySQL ºñµ¿±â µå¶óÀÌ¹ö (Async)
+mysqlclient>=2.2.0                # (Optional) ·ÎÄÃ Å×½ºÆ®¿ë
 
 # ==========================================
-# 3. AWS í´ë¼ìš°ë“œ (Storage)
+# 3. AWS Å¬¶ó¿ìµå (Storage)
 # ==========================================
-boto3>=1.28.0               # S3 ì´ë¯¸ì§€ ì—…ë¡œë“œìš© SDK
+boto3>=1.28.0               # S3 ÀÌ¹ÌÁö ¾÷·Îµå¿ë SDK
 
 # ==========================================
-# 4. AI - ê°ì²´ íƒì§€ (Computer Vision / YOLO)
-# ë‹´ë‹¹: ì†¡ì˜ìƒ, í—ˆì„±ê·œ
+# 4. AI - °´Ã¼ Å½Áö (Computer Vision / YOLO)
+# ´ã´ç: ¼Û¿µ»ó, Çã¼º±Ô
 # ==========================================
-ultralytics>=8.0.0          # YOLOv8 ëª¨ë¸ êµ¬ë™ (PyTorch í¬í•¨ë¨)
-opencv-python-headless      # ì´ë¯¸ì§€ ì²˜ë¦¬ (ì„œë²„ìš© GUI ì—†ëŠ” ë²„ì „ í•„ìˆ˜)
-pillow>=10.0.0              # ì´ë¯¸ì§€ ë¦¬ì‚¬ì´ì§• ë° í¬ë§· ë³€í™˜
+ultralytics>=8.0.0          # YOLOv8 ¸ğµ¨ ±¸µ¿ (PyTorch Æ÷ÇÔµÊ)
+opencv-python-headless      # ÀÌ¹ÌÁö Ã³¸® (¼­¹ö¿ë GUI ¾ø´Â ¹öÀü ÇÊ¼ö)
+pillow>=10.0.0              # ÀÌ¹ÌÁö ¸®»çÀÌÂ¡ ¹× Æ÷¸Ë º¯È¯
 
 # ==========================================
-# 5. AI - ê²€ìƒ‰ ì—”ì§„ (RAG / Search)
-# ë‹´ë‹¹: ì†¡ì˜ìƒ, í—ˆì„±ê·œ
+# 5. AI - °Ë»ö ¿£Áø (RAG / Search)
+# ´ã´ç: ¼Û¿µ»ó, Çã¼º±Ô
 # ==========================================
-openai>=1.0.0               # GPT-3.5 API í˜¸ì¶œ (ë‹µë³€ ìƒì„±ìš©)
-chromadb>=0.4.0             # ë²¡í„° DB (ì„ë² ë”© ì €ì¥ ë° ê²€ìƒ‰)
-sentence-transformers       # í…ìŠ¤íŠ¸ ì„ë² ë”© ëª¨ë¸ (MiniLM ë“± ê²½ëŸ‰ ëª¨ë¸ìš©)
-tiktoken                    # OpenAI í† í° ê³„ì‚° ìœ í‹¸ë¦¬í‹°
+openai>=1.0.0               # GPT-3.5 API È£Ãâ (´äº¯ »ı¼º¿ë)
+chromadb>=0.4.0             # º¤ÅÍ DB (ÀÓº£µù ÀúÀå ¹× °Ë»ö)
+sentence-transformers       # ÅØ½ºÆ® ÀÓº£µù ¸ğµ¨ (MiniLM µî °æ·® ¸ğµ¨¿ë)
+tiktoken                    # OpenAI ÅäÅ« °è»ê À¯Æ¿¸®Æ¼
 
 # ==========================================
-# [ì„¤ì¹˜ ê°€ì´ë“œ]
-# 0. íŒŒì´ì¬ ë²„ì „: 3.11.9 (3.14ë²„ì „ì€ ì„¤ì¹˜ ì•ˆë¨)
-# 1. ê°€ìƒí™˜ê²½ ìƒì„±: python -m venv venv
-# 2. ê°€ìƒí™˜ê²½ í™œì„±: source venv/bin/activate (Mac/Linux) or venv\Scripts\activate (Win)
-# 3. ì „ì²´ ì„¤ì¹˜: pip install -r requirements.txt
-# 4. ì„œë²„ ì‹¤í–‰: uvicorn app.main:app --reload
-# 5. API ì‹¤í–‰: http://127.0.0.1:8000/docs
+# [¼³Ä¡ °¡ÀÌµå]
+# 0. ÆÄÀÌ½ã ¹öÀü: 3.11.9 (3.14¹öÀüÀº ¼³Ä¡ ¾ÈµÊ)
+# 1. °¡»óÈ¯°æ »ı¼º: python -m venv venv
+# 2. °¡»óÈ¯°æ È°¼º: source venv/bin/activate (Mac/Linux) or venv\Scripts\activate (Win)
+# 3. ÀüÃ¼ ¼³Ä¡: pip install -r requirements.txt
+# 4. ¼­¹ö ½ÇÇà: uvicorn app.main:app --reload
+# 5. API ½ÇÇà: http://127.0.0.1:8000/docs
 # ==========================================

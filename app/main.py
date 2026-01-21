@@ -32,4 +32,5 @@ app.include_router(fortune_router, prefix="/api/fortune", tags=["Fortune"]) # [S
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "message": "QUAIL Server is Running"}
+    return {"status": "ok", "message": "QUAIL Server is Running~~!!"}
+# get post put delete 
