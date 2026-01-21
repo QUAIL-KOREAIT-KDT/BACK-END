@@ -1,0 +1,76 @@
+# [QUAIL Project Dependency List]
+# 최종 업데이트: 2026.01.21 1000
+# 대상: EC2 t3a.medium (Ubuntu) & Local Dev Environment
+
+# ==========================================
+# 1. 공통 및 백엔드 필수 (Backend Core)
+# ==========================================
+# 웹 프레임워크 및 서버
+# [1] Backend Core & API
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic-settings>=2.0.0
+python-multipart>=0.0.6
+requests>=2.31.0
+
+# [2] Database (Async MySQL)
+sqlalchemy>=2.0.0
+aiomysql>=0.2.0
+cryptography
+
+# [3] Auth & Security (JWT)
+python-jose[cryptography]
+passlib[bcrypt]
+
+# [4] AWS Cloud (S3 Image Upload)
+boto3>=1.28.0
+
+# [5] AI - Computer Vision (YOLO)
+ultralytics>=8.0.0
+opencv-python-headless
+pillow>=10.0.0
+
+# [6] AI - RAG & Search (OpenAI, Vector DB)
+openai>=1.0.0
+chromadb>=0.4.0
+tiktoken
+sentence-transformers
+
+# ==========================================
+# 2. 데이터베이스 (Database)
+# ==========================================
+# ORM 및 드라이버
+sqlalchemy>=2.0.0           # DB ORM
+aiomysql>=0.2.0             # MySQL 비동기 드라이버 (Async)
+mysqlclient>=2.2.0                # (Optional) 로컬 테스트용
+
+# ==========================================
+# 3. AWS 클라우드 (Storage)
+# ==========================================
+boto3>=1.28.0               # S3 이미지 업로드용 SDK
+
+# ==========================================
+# 4. AI - 객체 탐지 (Computer Vision / YOLO)
+# 담당: 송영상, 허성규
+# ==========================================
+ultralytics>=8.0.0          # YOLOv8 모델 구동 (PyTorch 포함됨)
+opencv-python-headless      # 이미지 처리 (서버용 GUI 없는 버전 필수)
+pillow>=10.0.0              # 이미지 리사이징 및 포맷 변환
+
+# ==========================================
+# 5. AI - 검색 엔진 (RAG / Search)
+# 담당: 송영상, 허성규
+# ==========================================
+openai>=1.0.0               # GPT-3.5 API 호출 (답변 생성용)
+chromadb>=0.4.0             # 벡터 DB (임베딩 저장 및 검색)
+sentence-transformers       # 텍스트 임베딩 모델 (MiniLM 등 경량 모델용)
+tiktoken                    # OpenAI 토큰 계산 유틸리티
+
+# ==========================================
+# [설치 가이드]
+# 0. 파이썬 버전: 3.11.9 (3.14버전은 설치 안됨)
+# 1. 가상환경 생성: python -m venv venv
+# 2. 가상환경 활성: source venv/bin/activate (Mac/Linux) or venv\Scripts\activate (Win)
+# 3. 전체 설치: pip install -r requirements.txt
+# 4. 서버 실행: uvicorn app.main:app --reload
+# ==========================================
