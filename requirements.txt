@@ -75,3 +75,10 @@ tiktoken                    # OpenAI 토큰 계산 유틸리티
 # 4. 서버 실행: uvicorn app.main:app --reload
 # 5. API 실행: http://127.0.0.1:8000/docs
 # ==========================================
+# 번외
+# Docker로 DB키기
+# 터미널(Ctrl + ~)에 아래 명령어를 입력합니다.
+# docker-compose up -d
+# (해설: "백그라운드(-d) 모드로 DB를 실행해라"라는 뜻입니다.)
+
+# [ 끄는 법 ] docker-compose stop
