@@ -1,11 +1,11 @@
 # [QUAIL Project Dependency List]
-# 최종 업데이트: 2026.01.21 1000
-# 대상: EC2 t3a.medium (Ubuntu) & Local Dev Environment
+# ???? ???????: 2026.01.21 1000
+# ???: EC2 t3a.medium (Ubuntu) & Local Dev Environment
 
 # ==========================================
-# 1. 공통 및 백엔드 필수 (Backend Core)
+# 1. ???? ?? ???? ??? (Backend Core)
 # ==========================================
-# 웹 프레임워크 및 서버
+# ?? ???????? ?? ????
 # [1] Backend Core & API
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
@@ -37,41 +37,48 @@ tiktoken
 sentence-transformers
 
 # ==========================================
-# 2. 데이터베이스 (Database)
+# 2. ?????????? (Database)
 # ==========================================
-# ORM 및 드라이버
+# ORM ?? ??????
 sqlalchemy>=2.0.0           # DB ORM
-aiomysql>=0.2.0             # MySQL 비동기 드라이버 (Async)
-mysqlclient>=2.2.0                # (Optional) 로컬 테스트용
+aiomysql>=0.2.0             # MySQL ??? ?????? (Async)
+mysqlclient>=2.2.0                # (Optional) ???? ??????
 
 # ==========================================
-# 3. AWS 클라우드 (Storage)
+# 3. AWS ????? (Storage)
 # ==========================================
-boto3>=1.28.0               # S3 이미지 업로드용 SDK
+boto3>=1.28.0               # S3 ????? ???ε?? SDK
 
 # ==========================================
-# 4. AI - 객체 탐지 (Computer Vision / YOLO)
-# 담당: 송영상, 허성규
+# 4. AI - ??? ??? (Computer Vision / YOLO)
+# ???: ?????, ????
 # ==========================================
-ultralytics>=8.0.0          # YOLOv8 모델 구동 (PyTorch 포함됨)
-opencv-python-headless      # 이미지 처리 (서버용 GUI 없는 버전 필수)
-pillow>=10.0.0              # 이미지 리사이징 및 포맷 변환
+ultralytics>=8.0.0          # YOLOv8 ?? ???? (PyTorch ?????)
+opencv-python-headless      # ????? ??? (?????? GUI ???? ???? ???)
+pillow>=10.0.0              # ????? ??????¡ ?? ???? ???
 
 # ==========================================
-# 5. AI - 검색 엔진 (RAG / Search)
-# 담당: 송영상, 허성규
+# 5. AI - ??? ???? (RAG / Search)
+# ???: ?????, ????
 # ==========================================
-openai>=1.0.0               # GPT-3.5 API 호출 (답변 생성용)
-chromadb>=0.4.0             # 벡터 DB (임베딩 저장 및 검색)
-sentence-transformers       # 텍스트 임베딩 모델 (MiniLM 등 경량 모델용)
-tiktoken                    # OpenAI 토큰 계산 유틸리티
+openai>=1.0.0               # GPT-3.5 API ??? (?? ??????)
+chromadb>=0.4.0             # ???? DB (????? ???? ?? ???)
+sentence-transformers       # ???? ????? ?? (MiniLM ?? ?淮 ???)
+tiktoken                    # OpenAI ??? ??? ??????
 
 # ==========================================
-# [설치 가이드]
-# 0. 파이썬 버전: 3.11.9 (3.14버전은 설치 안됨)
-# 1. 가상환경 생성: python -m venv venv
-# 2. 가상환경 활성: source venv/bin/activate (Mac/Linux) or venv\Scripts\activate (Win)
-# 3. 전체 설치: pip install -r requirements.txt
-# 4. 서버 실행: uvicorn app.main:app --reload
-# 5. API 실행: http://127.0.0.1:8000/docs
+# [??? ?????]
+# 0. ????? ????: 3.11.9 (3.14?????? ??? ???)
+# 1. ??????? ????: python -m venv venv
+# 2. ??????? ???: source venv/bin/activate (Mac/Linux) or venv\Scripts\activate (Win)
+# 3. ??? ???: pip install -r requirements.txt
+# 4. ???? ????: uvicorn app.main:app --reload
+# 5. API ????: http://127.0.0.1:8000/docs
 # ==========================================
+# 번외
+# Docker로 DB키기
+# 터미널(Ctrl + ~)에 아래 명령어를 입력합니다.
+# docker-compose up -d
+# (해설: "백그라운드(-d) 모드로 DB를 실행해라"라는 뜻입니다.)
+
+# [ 끄는 법 ] docker-compose stop
