@@ -1,0 +1,1 @@
+# BACK-END/app/domains/fortune/service.py

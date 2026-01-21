@@ -47,7 +47,7 @@ app/
 │   ├── diagnosis/              # [Diagnosis] 이미지 업로드, YOLO 추론, 결과 로깅
 │   ├── dictionary/             # [Dictionary] 곰팡이 도감 및 정적 정보 관리
 │   ├── search/                 # [Search] LLM + Vector DB 기반 지능형 검색 엔진
-│   └── fortune/                # [Fortune] '오늘의 팡이' 운세 서비스 (Gamification)
+│   └── fortune/                # [Fortune] '오늘의 팡이' 운세 서비스 
 ├── ml_models/                  # 🤖 Pre-trained AI Models (.pt files)
 ├── utils/                      # 🛠️ Utilities (AWS S3 Upload, Common Tools)
 ├── main.py                     # 🚀 Application Entry Point

@@ -1,0 +1,1 @@
+# BACK-END/app/domains/dictionary/models.py
