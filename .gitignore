@@ -1,3 +1,19 @@
+# .gitignore
+# 1. 파이썬 필수 무시 항목 (모든 폴더 적용)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 2. 가상환경 및 환경변수 (보안 필수)
+venv/
+.env
+.env.local
+
+# 3. 프로젝트 데이터 및 임시 파일
+db_data/
 memo.txt
-.gitignore
-/db_data
+.DS_Store
+
+# 4. IDE 설정 파일 (VSCode, Pycharm 등)
+.vscode/
+.idea/
