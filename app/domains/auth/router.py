@@ -1,0 +1,19 @@
+from fastapi import APIRouter
+
+from app.domains.auth.service import AuthService
+from app.domains.search import schemas
+from app.domains.auth.schemas import KakaoToken
+from app.domains.auth.service import AuthService
+
+router = APIRouter()
+service = AuthService()
+
+# 파이썬 문법은 
+# def 사용자정의 함수(인자:인자의 형식설명) 
+
+@router.post("/kakao")
+async def kakao_login(token: KakaoToken):
+    """Kakao 간편 로그인"""
+    print("Kakao 간편 로그인")
+    await service.login(token.access_token)
+    return {"token": "아무거나아무거나"}

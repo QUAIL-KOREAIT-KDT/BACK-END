@@ -11,6 +11,7 @@ from app.domains.diagnosis.router import router as diagnosis_router
 from app.domains.dictionary.router import router as dictionary_router
 from app.domains.search.router import router as search_router
 from app.domains.fortune.router import router as fortune_router
+from app.domains.auth.router import router as auth_router 
 
 app = FastAPI(
     title="QUAIL (팡팡팡)",
@@ -30,7 +31,10 @@ app.include_router(dictionary_router, prefix="/api/dictionary", tags=["Dictionar
 app.include_router(search_router, prefix="/api/search", tags=["RAG Search"])
 app.include_router(fortune_router, prefix="/api/fortune", tags=["Fortune"]) # [Source 1]
 
+app.include_router(auth_router , prefix="/auth", tags=["Auth"])
+
 @app.get("/")
 def health_check():
     return {"status": "ok", "message": "QUAIL Server is Running~~!!"}
 # get post put delete 
+
