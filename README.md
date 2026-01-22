@@ -4,7 +4,6 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0+-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Latest-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 
 ## 📖 Project Overview
 
@@ -25,7 +24,6 @@
 | **AI (Vision)** | **YOLOv8** | 곰팡이 객체 탐지 및 심각도(G1~G5) 분류 모델 |
 | **AI (LLM)** | **OpenAI / ChromaDB** | 텍스트 임베딩 및 벡터 검색 기반 RAG 챗봇 구현 |
 | **Infra & Storage** | **AWS S3** | 진단 이미지 및 에셋 데이터의 안전한 클라우드 저장 |
-| **Deployment** | **Docker** | 컨테이너 기반의 일관된 배포 환경 구성 |
 
 ---
 
@@ -49,6 +47,5 @@ app/
 │   ├── search/                 # [Search] LLM + Vector DB 기반 지능형 검색 엔진
 │   └── fortune/                # [Fortune] '오늘의 팡이' 운세 서비스 
 ├── ml_models/                  # 🤖 Pre-trained AI Models (.pt files)
-├── utils/                      # 🛠️ Utilities (AWS S3 Upload, Common Tools)
-├── main.py                     # 🚀 Application Entry Point
-└── Dockerfile                  # 🐳 Docker Container Configuration
+├── utils/                      # 🛠️ Utilities (AWS S3 Upload, Common Tools)             
+└── main.py                     # 🚀 Application Entry Point

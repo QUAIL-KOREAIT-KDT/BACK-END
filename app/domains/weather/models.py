@@ -1,0 +1,29 @@
+# app/domains/weather/models.py
+
+from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint
+from app.core.database import Base
+
+class Weather(Base):
+    __tablename__ = "weather"
+
+    # 날씨 번호
+    id = Column(Integer, primary_key=True, index=True)
+
+    # 날짜 및 시간
+    date = Column(DateTime(timezone=True), nullable=False)
+
+    # 지역 (8곳)
+    region = Column(String(20), nullable=False)
+    
+    # 기상 데이터
+    temp = Column(Float, nullable=False)      # 기온
+    humid = Column(Float, nullable=False)     # 습도
+    dew_point = Column(Float, nullable=False) # 이슬점
+    pp = Column(Integer, nullable=False)      # 강수확률 (PP)
+    mold_index = Column(Integer, nullable=False) # 곰팡이 위험지수
+
+    # [3. 핵심! 중복 방지 설정]
+    # 같은 날짜(date)에 같은 지역(region) 데이터는 오직 하나만 존재해야 함
+    __table_args__ = (
+        UniqueConstraint('date', 'region', name='uix_date_region'),
+    )
