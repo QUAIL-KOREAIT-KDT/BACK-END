@@ -19,6 +19,9 @@ class User(Base):
     # 창문 방향
     window_direction = Column(Enum("E", "W", "S", "N", "O", name="user_window_direction_types"))
 
+    # 지하
+    underground = Column(Enum("u", "h", name="underground_types"), nullable=True)
+
     # 주소
     address = Column(String(255), nullable=False)
 
