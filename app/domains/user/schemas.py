@@ -12,3 +12,6 @@ class UserProfileUpdate(BaseModel):
     window_direction: str   # 남향, 동향 등 [Source 3]
     indoor_temp: Optional[float] = None
     indoor_humidity: Optional[float] = None
+
+class UserHomeUpdate(BaseModel):
+    userid: int
