@@ -1,4 +1,4 @@
-# BACK-END/app/domains/weather/models.py
+# BACK-END/app/domains/home/models.py
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint
 from app.core.database import Base

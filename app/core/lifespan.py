@@ -6,7 +6,7 @@ from app.core.database import engine, Base
 
 # [중요] 테이블 생성을 위해 모든 모델을 미리 메모리에 로드해야 합니다.
 from app.domains.user.models import User
-from app.domains.weather.models import Weather
+from app.domains.home.models import Weather
 from app.domains.diagnosis.models import Diagnosis
 from app.domains.dictionary.models import Dictionary
 

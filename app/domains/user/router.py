@@ -1,7 +1,7 @@
 # BACK-END/app/domains/users/router.py
 
 from fastapi import APIRouter
-from app.domains.user.schemas import UserLogin, UserProfileUpdate
+from app.domains.user.schemas import UserLogin, UserProfileUpdate, UserHomeUpdate
 from app.domains.user.service import UserService
 
 router = APIRouter()
@@ -10,13 +10,15 @@ service = UserService()
 @router.post("/login")
 async def login(data: UserLogin):
     """카카오 간편 로그인"""
+    """아직 리턴값 못정함"""
     print("카카오 간편 로그인")
     await service.login_kakao(data.kakao_token)
     return {"token": "dummy_jwt_token", "user_id": 1}
 
-@router.get("/logout")
+@router.post("/logout")
 async def logout(data: UserLogin):
-    """카카오 간편 로그아웃"""
+    """카카오 간편 로그아웃"""\
+    """아직 리턴값 못정함"""
     print("카카오 간편 로그아웃")
     await service.logout_kakao(data.kakao_token)
     return {"status": "success"}
@@ -24,6 +26,7 @@ async def logout(data: UserLogin):
 @router.delete("/withdraw")
 async def withdraw():
     """희원 탈퇴!!(ㅋㅋㅋ)"""
+    """아직 리턴값 못정함"""
     await service.withdraw_user(1)
     return {"status": "success"}
 
@@ -31,7 +34,9 @@ async def withdraw():
 async def onboarding(data: UserProfileUpdate):
     """온보딩 정보 기입"""
     await service.onboarding(data.userid, data.address, data.window_direction)
-    return {"status": "success"}
+    return {
+        "status": "success", 
+    }
 
 @router.get("/me")
 async def get_user_info(data: UserLogin):
