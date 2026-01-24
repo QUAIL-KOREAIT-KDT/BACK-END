@@ -1,5 +1,5 @@
 # BACK-END/app/domains/users/service.py
-#
+
 class UserService:
     async def login_kakao(self, token: str):
         # 카카오 API 토큰 검증 및 DB 사용자 조회/생성
@@ -17,6 +17,10 @@ class UserService:
         # 온보딩 정보(주소, 창문방향) DB 저장
         pass
     
+    async def me(self, user_id: int):
+        #내 정보 조회
+        pass
+
     async def update_profile(self, user_id: int, data: dict):
         # 마이페이지 정보(주소, 창문방향) DB 업데이트
         pass

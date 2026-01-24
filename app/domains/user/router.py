@@ -34,8 +34,9 @@ async def onboarding(data: UserProfileUpdate):
     return {"status": "success"}
 
 @router.get("/me")
-async def get_user_info():
+async def get_user_info(data: UserLogin):
     """내 정보 조회"""
+    await service.me(data.userid)
     return {
         "user_id": 1,
         "address": "서울특별시 강남구 역삼동",
