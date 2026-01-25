@@ -16,3 +16,11 @@ AsyncSessionLocal = async_sessionmaker(
 
 # 3. 모델들이 상속받을 Base 클래스
 Base = declarative_base()
+
+# API에서 DB를 사용할 수 있게 해주는 함수
+async def get_db():
+    db = AsyncSessionLocal()
+    try:
+        yield db
+    finally:
+        await db.close()

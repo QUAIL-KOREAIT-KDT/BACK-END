@@ -1,6 +1,6 @@
 # BACK-END/app/domains/diagnosis/models.py
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, Text
 from sqlalchemy.sql import func  # [중요] DB의 함수(NOW)를 쓰기 위해 필요
 from app.core.database import Base
 
@@ -22,13 +22,13 @@ class Diagnosis(Base):
 
     # 사용자 사진 경로
     image_path = Column(String(255), nullable=False)
-    
-    # 창문 방향 => 동,서,남,북, 기타(모름)
-    window_direction = Column(Enum("E", "W", "S", "N", "O", name="diagnosis_window_direction_types"))
 
-    # 곰팡이 위치 => 창문, 벽지, 부엌, 욕실, 천장, 음식
-    mold_location = Column(Enum("Windows", "wallpaper", "kitchen", "bathroom", "ceiling", "food", name='mold_location_types'))
+    # 곰팡이 위치 => 창문, 벽지, 욕실, 천장, 주방, 음식, 베란다, 에어컨, 거실, 세면대, 변기
+    mold_location = Column(Enum("Windows", "wallpaper", "bathroom", "ceiling", "kitchen", "food", "veranda", "air_conditioner", "living_room", "sink", "toilet", name='mold_location_types'))
 
     # 2. 가입일 [datetime NOW()] 해결
     # server_default=func.now() : 데이터가 들어갈 때 DB가 알아서 시간을 찍어줌
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # 진단 솔루션
+    model_solution = Column(Text, nullable=False)

@@ -16,11 +16,11 @@ class Dictionary(Base):
     # 곰팡이 이름 Stachybotrys, Alternaria ...
     name = Column(String(50), nullable=False)
 
-    # 곰팡이 특징 => 1.색상, 2.외형특징(질감), 3.서식환경(온도, 습도, 발생장소), 4.유해정보
+    # 1.색상, 2.외형, 3.환경, 4.유해정보를 합쳐서 저장 \t로 구분
     feature = Column(Text, nullable=False)
 
     # 곰팡이 출몰 위치
-    location = Column(Enum("Windows", "wallpaper", "kitchen", "bathroom", "ceiling", "food", name='location_types'), nullable=False)
+    location = Column(String(255), nullable=False)
     
     # 썸네일 경로
     image_path = Column(String(255), nullable=False)

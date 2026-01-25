@@ -17,16 +17,16 @@ class User(Base):
     nickname = Column(String(50), nullable=False)
 
     # 창문 방향
-    window_direction = Column(Enum("E", "W", "S", "N", "O", name="user_window_direction_types"))
+    window_direction = Column(Enum("E", "W", "S", "N", "O", name="user_window_direction_types"), nullable=True)
 
     # 지하
-    underground = Column(Enum("u", "h", name="underground_types"), nullable=True)
+    underground = Column(Enum("underground", "semi-basement", name="underground_types"), nullable=True)
 
     # 주소
-    address = Column(String(255), nullable=False)
+    address = Column(String(255), nullable=True)
 
     # 날씨 연결할 근처 가까운 주소
-    output_address = Column(String(50), nullable=False)
+    output_address = Column(String(50), nullable=True)
 
     # 사용자 실내 온도
     indoor_temp = Column(Float, nullable=True)
