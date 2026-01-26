@@ -10,8 +10,8 @@ service = UserService()
 
 @router.delete("/withdraw")
 async def withdraw():
-    """희원 탈퇴!!(ㅋㅋㅋ)"""
-    """아직 리턴값 못정함"""
+    """희원 탈퇴!!(ㅋㅋㅋ)\n
+    아직 리턴값 못정함"""
     await service.withdraw_user(1)
     return {"status": "success"}
 

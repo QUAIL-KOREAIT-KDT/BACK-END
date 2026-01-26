@@ -8,8 +8,8 @@ service = WeatherService()
 
 @router.get("/molddate")
 async def get_weather_risk(token):
-    """메인 페이지 당일 곰팡이 지수 조회"""
-    """토큰에서 아이디를 뽑고 아이디로 주소를 뽑는다"""
+    """메인 페이지 당일 곰팡이 지수 조회\n
+    토큰에서 아이디를 뽑고 아이디로 주소를 뽑는다"""
     await service.get_mold_risk(token)
     return {
         "date": "20260124 1325",
