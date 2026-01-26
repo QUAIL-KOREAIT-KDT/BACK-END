@@ -36,6 +36,24 @@ class UserService:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
         return user
 
+    async def login_via_kakao(self, db: AsyncSession, kakao_id: str, nickname: str):
+        """
+        카카오 로그인
+        Return: (user, is_new_user)
+        """
+        # 1. DB에서 찾아보기
+        user = await self.repo.get_user_by_kakao_id(db, kakao_id)
+        
+        is_new_user = False
+        
+        # 2. 없으면 회원가입 (신규)
+        if not user:
+            user = await self.repo.create_user(db, kakao_id, nickname)
+            is_new_user = True  # 신규 유저라고 표시!
+            
+        # 3. 유저 객체와 신규 여부를 같이 반환
+        return user, is_new_user
+    
     async def update_profile(self, db: AsyncSession, user_id: int, address: str, window_direction: str, indoor_temp: float, indoor_humidity: float):
         """내 정보 수정"""
         # 온보딩과 로직이 같다면 재사용해도 좋습니다.
