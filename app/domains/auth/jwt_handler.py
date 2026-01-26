@@ -7,20 +7,15 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
 
-# JWT 설정
-SECRET_KEY = "노제바보"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
-
 # OAuth2PasswordBearer 대신 HTTPBearer 사용
 security = HTTPBearer()  # (단순 토큰 입력창 생성)
 
 def create_access_token(data: dict):
     """JWT 토큰 생성 (로그인 시 사용) - 기존과 동일"""
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
 # 토큰 검증 및 아이디 불러오기
@@ -37,7 +32,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception

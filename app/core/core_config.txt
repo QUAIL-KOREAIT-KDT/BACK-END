@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     KMA_API_KEY: str 
     DATA_API_KEY: str
     
+
+    SECRET_KEY: str
+    ALGORITHM: str 
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440 # 기본값 (24시간)
+
     # 4. 선택적 설정 (기본값 None 허용)
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None
