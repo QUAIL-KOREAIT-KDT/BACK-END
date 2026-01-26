@@ -1,22 +1,42 @@
-# BACK-END/app/domains/users/service.py
+# BACK-END/app/domains/user/service.py
+
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.domains.user.repository import UserRepository
 
 class UserService:
-    async def withdraw_user(self, user_id: int):
-        # 회원 탈퇴 및 데이터 삭제
-        pass
-    
-    async def onboarding(self, user_id: int, address: str, window_direction: str):
-        # 온보딩 정보(주소, 창문방향) DB 저장
-        pass
+    def __init__(self):
+        self.repo = UserRepository()
 
-    async def me(self, user_id: int):
-        #내 정보 조회
-        pass
-
-    async def update_profile(self, user_id: int, data: dict):
-        # 마이페이지 정보(주소, 창문방향) DB 업데이트
-        pass
+    async def withdraw_user(self, db: AsyncSession, user_id: int):
+        """회원 탈퇴"""
+        is_deleted = await self.repo.delete_user(db, user_id)
+        if not is_deleted:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        return {"status": "success", "message": "회원 탈퇴 완료"}
     
-    async def update_home(self, user_id: int):
-        # 집 정보 수정
-        pass
+    async def me(self, db: AsyncSession, user_id: int):
+        """내 정보 조회"""
+        user = await self.repo.get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        return user
+
+    async def onboarding(self, db: AsyncSession, user_id: int, address: str, window_direction: str, indoor_temp: float = None, indoor_humidity: float = None):
+        """온보딩 (정보 등록)"""
+        # Repo의 update_user 기능을 재사용하여 코드를 줄입니다.
+        user = await self.repo.update_user(
+            db, user_id,
+            address=address,
+            window_direction=window_direction,
+            indoor_temp=indoor_temp,
+            indoor_humidity=indoor_humidity
+        )
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        return user
+
+    async def update_profile(self, db: AsyncSession, user_id: int, address: str, window_direction: str, indoor_temp: float, indoor_humidity: float):
+        """내 정보 수정"""
+        # 온보딩과 로직이 같다면 재사용해도 좋습니다.
+        return await self.onboarding(db, user_id, address, window_direction, indoor_temp, indoor_humidity)

@@ -1,48 +1,57 @@
-# BACK-END/app/domains/users/router.py
+# BACK-END/app/domains/user/router.py
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
 from app.domains.auth.jwt_handler import verify_token
-from app.domains.user.schemas import UserLogin, UserProfileUpdate, UserHomeUpdate
+from app.domains.user.schemas import UserProfileUpdate
 from app.domains.user.service import UserService
 
 router = APIRouter()
 service = UserService()
 
+# 1. 회원 탈퇴
 @router.delete("/withdraw")
-async def withdraw():
-    """희원 탈퇴!!(ㅋㅋㅋ)\n
-    아직 리턴값 못정함"""
-    await service.withdraw_user(1)
-    return {"status": "success"}
+async def withdraw(
+    user_id: int = Depends(verify_token), 
+    db: AsyncSession = Depends(get_db)
+):
+    return await service.withdraw_user(db, user_id)
 
+# 2. 온보딩
 @router.post("/onboarding")
-async def onboarding(data: UserProfileUpdate, user_id: int= Depends(verify_token)):
-    """온보딩 정보 기입"""
-    await service.onboarding(user_id, data.address, data.window_direction, data.indoor_temp, data.indoor_humidity)
-    return {
-        "status": "success", 
-    }
-
-@router.get("/me")
-async def get_user_info(user_id: int = Depends(verify_token)):
-    """내 정보 조회"""
-    await service.me(user_id)
-    return {
-        "user_id": 1,
-        "address": "서울",
-        "window_direction": "남향",
-        "indoor_temp": 22.5,
-        "indoor_humidity": 55
-    }
-
-@router.put("/profile-info")
-async def update_profile(data: UserProfileUpdate):
-    """내 정보 수정"""
-    await service.update_profile(data.userid, data.address, data.window_direction, data.indoor_temp, data.indoor_humidity)
+async def onboarding(
+    data: UserProfileUpdate, 
+    user_id: int = Depends(verify_token),
+    db: AsyncSession = Depends(get_db)
+):
+    await service.onboarding(
+        db, user_id, 
+        data.address, data.window_direction, 
+        data.indoor_temp, data.indoor_humidity
+    )
     return {"status": "success"}
 
-@router.put("/home-info")
-async def update_home(data: UserHomeUpdate):
-    """집 정보 수정"""
-    await service.update_home(data.userid)
+# 3. 내 정보 조회
+@router.get("/me")
+async def get_user_info(
+    user_id: int = Depends(verify_token), 
+    db: AsyncSession = Depends(get_db)
+):
+    return await service.me(db, user_id)
+
+# 4. 프로필 수정
+@router.put("/profile-info")
+async def update_profile(
+    data: UserProfileUpdate,
+    user_id: int = Depends(verify_token),
+    db: AsyncSession = Depends(get_db)
+):
+    # [수정 완료] 이제 service.update_profile이 존재하므로 에러가 나지 않습니다.
+    await service.update_profile(
+        db, user_id, 
+        data.address, data.window_direction, 
+        data.indoor_temp, data.indoor_humidity
+    )
     return {"status": "success"}
