@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # (만약 .env에 없으면 에러가 나도록 하여 실수를 방지합니다)
     KMA_API_KEY: str 
     DATA_API_KEY: str
-    
+    KAKAO_REST_API_KEY: str
 
     SECRET_KEY: str
     ALGORITHM: str 
