@@ -2,8 +2,9 @@
 
 from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse 
+from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError # 데이터 검증
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.lifespan import lifespan
 
@@ -26,6 +27,19 @@ app = FastAPI(
     description="곰팡이 예방 및 제거 솔루션 API [Source 6]",
     version="1.0.0",
     lifespan=lifespan # [Source 1] AI 모델 로드 연결
+)
+
+# CORS 설정 (Flutter 웹에서 API 호출 허용)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5000",    # Flutter 웹 (개발)
+        "http://127.0.0.1:5000",
+        "http://localhost:3000",    # 기타 프론트엔드
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # [Source 2] 정적 파일 마운트 (로컬 이미지 서빙)
