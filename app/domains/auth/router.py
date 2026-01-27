@@ -56,3 +56,41 @@ async def kakao_login(token: KakaoLoginRequest, db: AsyncSession = Depends(get_d
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="로그인 처리에 실패했습니다. (카카오 토큰 만료 등)"
         )
+
+
+# ============================================================
+# 개발용 로그인 API - 에뮬레이터/테스트 환경에서 카카오 로그인 없이 토큰 발급
+# [주의] 프로덕션 배포 시 반드시 제거하거나 비활성화하세요!
+# ============================================================
+@router.post("/dev-login", response_model=AuthResponse)
+async def dev_login(db: AsyncSession = Depends(get_db)):
+    """
+    [개발 전용] 카카오 로그인 없이 테스트 계정으로 JWT 발급
+    에뮬레이터나 테스트 환경에서 사용
+    """
+    try:
+        # 테스트용 카카오 ID (고정값)
+        test_kakao_id = "dev_test_user_12345"
+        
+        # DB에서 테스트 유저 조회/생성
+        user, is_new_user = await user_service.login_via_kakao(db, test_kakao_id)
+        
+        # JWT 토큰 발급
+        access_token = create_access_token(data={"sub": str(user.id)})
+        
+        print(f"[DEV LOGIN] 개발용 로그인 성공 - userId: {user.id}")
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user_id": user.id,
+            "is_new_user": is_new_user,
+            "nickname": user.nickname or "테스트유저"
+        }
+        
+    except Exception as e:
+        print(f"[DEV LOGIN] Error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"개발용 로그인 실패: {str(e)}"
+        )
