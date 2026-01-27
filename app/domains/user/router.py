@@ -19,7 +19,7 @@ async def withdraw(
 ):
     return await service.withdraw_user(db, user_id)
 
-# 2. 온보딩
+# 2. 온보딩 
 @router.post("/onboarding")
 async def onboarding(
     data: UserProfileUpdate, 
@@ -28,8 +28,12 @@ async def onboarding(
 ):
     await service.onboarding(
         db, user_id, 
-        data.address, data.window_direction, 
-        data.indoor_temp, data.indoor_humidity
+        data.nickname,
+        data.address,
+        data.underground, 
+        data.window_direction, 
+        data.indoor_temp, 
+        data.indoor_humidity
     )
     return {"status": "success"}
 

@@ -3,6 +3,9 @@
 from pydantic import BaseModel
 from typing import Optional, Literal
 
+#
+#=============입력================
+#
 class UserProfileUpdate(BaseModel):
     nickname: str
     address: str
@@ -17,3 +20,7 @@ class UserProfileUpdate(BaseModel):
 
 class UserHomeUpdate(BaseModel):
     userid: int
+
+#
+# ============출력===============
+#

@@ -20,7 +20,7 @@ class User(Base):
     window_direction = Column(Enum("S", "N", "O", name="user_window_direction_types"), nullable=True)
 
     # 지하
-    underground = Column(Enum("underground", "semi-basement", name="underground_types"), nullable=True)
+    underground = Column(Enum("underground", "semi-basement, others", name="underground_types"), nullable=True)
 
     # 주소
     address = Column(String(255), nullable=True)

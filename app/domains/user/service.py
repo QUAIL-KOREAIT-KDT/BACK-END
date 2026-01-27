@@ -22,12 +22,15 @@ class UserService:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
         return user
 
-    async def onboarding(self, db: AsyncSession, user_id: int, address: str, window_direction: str, indoor_temp: float = None, indoor_humidity: float = None):
+    async def onboarding(self, db: AsyncSession, user_id: int, nickname: str, address: str, underground: str, window_direction: str, indoor_temp: float = None, indoor_humidity: float = None):
         """온보딩 (정보 등록)"""
         # Repo의 update_user 기능을 재사용하여 코드를 줄입니다.
         user = await self.repo.update_user(
-            db, user_id,
+            db, 
+            user_id,
+            nickname=nickname,
             address=address,
+            underground=underground,
             window_direction=window_direction,
             indoor_temp=indoor_temp,
             indoor_humidity=indoor_humidity
