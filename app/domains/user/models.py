@@ -17,7 +17,7 @@ class User(Base):
     nickname = Column(String(50), nullable=True)
 
     # 창문 방향
-    window_direction = Column(Enum("E", "W", "S", "N", "O", name="user_window_direction_types"), nullable=True)
+    window_direction = Column(Enum("S", "N", "O", name="user_window_direction_types"), nullable=True)
 
     # 지하
     underground = Column(Enum("underground", "semi-basement", name="underground_types"), nullable=True)
@@ -36,3 +36,5 @@ class User(Base):
 
     # 가입일
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    
