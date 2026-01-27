@@ -14,7 +14,7 @@ class User(Base):
     kakao_id = Column(String(50), unique=True, nullable=False)
 
     # 닉네임
-    nickname = Column(String(50), nullable=False)
+    nickname = Column(String(50), nullable=True)
 
     # 창문 방향
     window_direction = Column(Enum("E", "W", "S", "N", "O", name="user_window_direction_types"), nullable=True)

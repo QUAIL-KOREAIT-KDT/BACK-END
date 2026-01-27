@@ -11,3 +11,4 @@ class AuthResponse(BaseModel):
     token_type: str = "bearer"
     user_id: int
     is_new_user: bool
+    nickname: str | None

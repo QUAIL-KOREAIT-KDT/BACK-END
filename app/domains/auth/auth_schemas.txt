@@ -1,12 +1,14 @@
 # BACK-END/app/domains/auth/schemas.py
+
 from pydantic import BaseModel
 
-# [Input] 프론트엔드가 보내는 데이터
-class KakaoToken(BaseModel):
+class KakaoLoginRequest(BaseModel):
     access_token: str
 
-# [Output] 서버가 돌려주는 데이터
-class TokenResponse(BaseModel):
+class AuthResponse(BaseModel):
+    """로그인 성공 시 반환할 데이터"""
     access_token: str
-    token_type: str
+    token_type: str = "bearer"
     user_id: int
+    is_new_user: bool
+    nickname: str | None

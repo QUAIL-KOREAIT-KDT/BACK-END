@@ -6,9 +6,9 @@ from app.domains.user.models import User
 
 class UserRepository:
     
-    # 1. [Create] 회원가입
-    async def create_user(self, db: AsyncSession, kakao_id: str, nickname: str):
-        new_user = User(kakao_id=kakao_id, nickname=nickname)
+    # 0. 사용자 등록(완전 첫 접속)
+    async def create_user(self, db: AsyncSession, kakao_id: str):
+        new_user = User(kakao_id=kakao_id)
         db.add(new_user)
         await db.commit()
         await db.refresh(new_user)

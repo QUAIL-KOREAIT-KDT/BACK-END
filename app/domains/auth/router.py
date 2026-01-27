@@ -27,12 +27,12 @@ async def kakao_login(token: KakaoLoginRequest, db: AsyncSession = Depends(get_d
         kakao_user_info = await kakao_client.get_user_info(token.access_token)
         
         kakao_id = str(kakao_user_info.get("id"))
-        nickname = kakao_user_info.get("properties", {}).get("nickname", "Unknown")
+        # nickname = kakao_user_info.get("properties", {}).get("nickname", None) 카톡서버에서 닉네임 가져오는건데 설정안함 나중에 추가적으로 해도 됨
 
         # 2. [DB] 유저 서비스에게 "이 카카오 ID로 로그인해줘(없으면 가입시키고)" 라고 시킵니다.
         # user_service.login_via_kakao는 (User객체, 신규유저여부) 튜플을 반환해야 합니다. (이전 단계 참고)
         # 만약 user_service가 User 객체만 반환한다면 아래처럼 수정 필요
-        user, is_new_user = await user_service.login_via_kakao(db, kakao_id, nickname)
+        user, is_new_user = await user_service.login_via_kakao(db, kakao_id)
         
         # (참고: 이전 대화에서 login_via_kakao가 (user, is_new)를 반환하도록 수정했었습니다.
         # 만약 아직 수정 안 했다면 user 객체만 넘어옵니다. 여기서는 user 객체만 있다고 가정합니다.)
@@ -45,7 +45,8 @@ async def kakao_login(token: KakaoLoginRequest, db: AsyncSession = Depends(get_d
             "access_token": access_token,
             "token_type": "bearer",
             "user_id": user.id,
-            "is_new_user": is_new_user # user_service 로직에 따라 True/False 분기 필요
+            "is_new_user": is_new_user, # user_service 로직에 따라 True/False 분기 필요
+            "nickname": user.nickname
         }
         
     except Exception as e:
