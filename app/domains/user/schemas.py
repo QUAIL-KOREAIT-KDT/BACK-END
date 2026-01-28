@@ -6,20 +6,23 @@ from typing import Optional, Literal
 #
 #=============입력================
 #
-class UserProfileUpdate(BaseModel):
+class UserOnboarding(BaseModel):
     nickname: str
     address: str
-    underground: Literal["underground", "semi-basement"]
-    
-    # [수정] str 대신 Literal을 사용하면 Swagger에서 드롭다운으로 선택 가능해집니다!
-    # S: 남, N: 북, O: O(None)
+    underground: Literal["underground", "semi-basement", "others"] # others 추가 추천
     window_direction: Literal["S", "N", "O"] 
-    
+    indoor_temp: float = 24.0  # 기본값 제공
+    indoor_humidity: float = 50.0
+
+# 2. [수정용] 바꾸고 싶은 것만 보냄 (전부 Optional)
+class UserProfileUpdate(BaseModel):
+    nickname: Optional[str] = None
+    address: Optional[str] = None
+    underground: Optional[Literal["underground", "semi-basement", "others"]] = None
+    window_direction: Optional[Literal["S", "N", "O"]] = None
     indoor_temp: Optional[float] = None
     indoor_humidity: Optional[float] = None
 
-class UserHomeUpdate(BaseModel):
-    userid: int
 
 #
 # ============출력===============

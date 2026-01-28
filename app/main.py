@@ -9,8 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.lifespan import lifespan
 
 # 라우터 임포트
-from app.domains.auth.jwt_handler import verify_token
-
 from app.domains.user.router import router as user_router
 from app.domains.home.router import router as home_router
 from app.domains.diagnosis.router import router as diagnosis_router

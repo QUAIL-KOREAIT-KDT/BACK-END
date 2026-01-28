@@ -22,23 +22,16 @@ class UserService:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
         return user
 
-    async def onboarding(self, db: AsyncSession, user_id: int, nickname: str, address: str, underground: str, window_direction: str, indoor_temp: float = None, indoor_humidity: float = None):
-        """온보딩 (정보 등록)"""
-        # Repo의 update_user 기능을 재사용하여 코드를 줄입니다.
-        user = await self.repo.update_user(
-            db, 
-            user_id,
-            nickname=nickname,
-            address=address,
-            underground=underground,
-            window_direction=window_direction,
-            indoor_temp=indoor_temp,
-            indoor_humidity=indoor_humidity
-        )
+    # [통합 및 수정] 온보딩과 수정 기능을 하나로 합칩니다.
+    async def update_user_info(self, db: AsyncSession, user_id: int, **kwargs):
+        """유저 정보 업데이트 (온보딩/수정 공용)"""
+        # Repository의 update_user가 이미 **kwargs를 지원하도록 만들었으므로 그대로 전달
+        user = await self.repo.update_user(db, user_id, **kwargs)
+        
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
         return user
-
+    
     async def login_via_kakao(self, db: AsyncSession, kakao_id: str):
         """
         카카오 로그인
@@ -56,7 +49,6 @@ class UserService:
         # 3. 유저 객체와 신규 여부를 같이 반환
         return user, is_new_user
     
-    async def update_profile(self, db: AsyncSession, user_id: int, address: str, window_direction: str, indoor_temp: float, indoor_humidity: float):
-        """내 정보 수정"""
-        # 온보딩과 로직이 같다면 재사용해도 좋습니다.
-        return await self.onboarding(db, user_id, address, window_direction, indoor_temp, indoor_humidity)
+    
+    
+    
