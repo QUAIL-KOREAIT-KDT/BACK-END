@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     DATA_API_KEY: str
     KAKAO_REST_API_KEY: str
 
+    # JWT
     SECRET_KEY: str
     ALGORITHM: str 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440 # 기본값 (24시간)
@@ -23,6 +24,8 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None
     AWS_BUCKET_NAME: str | None = None
+    AWS_REGION_NAME: str = "ap-northeast-2"
+
     OPENAI_API_KEY: str | None = None
 
     class Config:
