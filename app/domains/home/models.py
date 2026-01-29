@@ -6,24 +6,23 @@ from app.core.database import Base
 class Weather(Base):
     __tablename__ = "weather"
 
-    # 날씨 번호
     id = Column(Integer, primary_key=True, index=True)
-
-    # 날짜 및 시간
     date = Column(DateTime(timezone=True), nullable=False)
 
-    # 지역 (8곳)
-    region = Column(String(20), nullable=False)
+    # [수정] 지역 이름(region) 삭제 -> 격자 좌표(nx, ny) 추가
+    nx = Column(Integer, nullable=False) 
+    ny = Column(Integer, nullable=False)
     
-    # 기상 데이터
-    temp = Column(Float, nullable=False)      # 기온
-    humid = Column(Float, nullable=False)     # 습도
-    dew_point = Column(Float, nullable=False) # 이슬점
-    pp = Column(Integer, nullable=False)      # 강수확률 (PP)
-    mold_index = Column(Integer, nullable=False) # 곰팡이 위험지수
+    # [수정] 컬럼명 통일 (pp -> rain_prob)
+    temp = Column(Float, nullable=False)         # 기온 (TMP)
+    humid = Column(Float, nullable=False)        # 습도 (REH)
+    rain_prob = Column(Integer, nullable=False)  # 강수확률 (POP)
+    
+    # 파생 데이터
+    dew_point = Column(Float, nullable=True)     # 이슬점
+    mold_index = Column(Integer, nullable=True)  # 곰팡이 지수
 
-    # [3. 핵심! 중복 방지 설정]
-    # 같은 날짜(date)에 같은 지역(region) 데이터는 오직 하나만 존재해야 함
+    # [중요] 날짜 + 좌표가 같으면 중복 저장 금지
     __table_args__ = (
-        UniqueConstraint('date', 'region', name='uix_date_region'),
+        UniqueConstraint('date', 'nx', 'ny', name='uix_weather_grid_date'),
     )

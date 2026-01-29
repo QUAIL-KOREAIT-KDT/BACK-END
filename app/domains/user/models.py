@@ -5,7 +5,7 @@ from sqlalchemy.sql import func
 from app.core.database import Base
 
 class User(Base):
-    __tablename__ = "users"  # 여기에 적힌 이름으로 DB에 생성됨
+    __tablename__ = "users"
 
     # 사용자 고유번호
     id = Column(Integer, primary_key=True, index=True)
@@ -25,8 +25,13 @@ class User(Base):
     # 주소
     address = Column(String(255), nullable=True)
 
-    # 날씨 연결할 근처 가까운 주소
-    output_address = Column(String(50), nullable=True)
+    # ========== [추가할 부분] 기상청 좌표 연동용 ==========
+    region_address = Column(String(255), nullable=True) # 예: "경기 안산시 상록구"
+    grid_nx = Column(Integer, nullable=True)            # 기상청 X값
+    grid_ny = Column(Integer, nullable=True)            # 기상청 Y값
+    latitude = Column(Float, nullable=True)             # 위도
+    longitude = Column(Float, nullable=True)            # 경도
+    # ====================================================
 
     # 사용자 실내 온도
     indoor_temp = Column(Float, nullable=True)
