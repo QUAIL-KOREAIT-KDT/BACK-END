@@ -35,11 +35,11 @@ tiktoken
 sentence-transformers
 
 # ==========================================
-# [¼³Ä¡ °¡ÀÌµå]
-# 0. ÆÄÀÌ½ã ¹öÀü: 3.11.9 (3.14¹öÀüÀº ¼³Ä¡ ¾ÈµÊ)
-# 1. °¡»óÈ¯°æ »ı¼º: python -m venv venv
-# 2. °¡»óÈ¯°æ È°¼º: source venv/bin/activate (Mac/Linux) or venv\Scripts\activate (Win)
-# 3. ÀüÃ¼ ¼³Ä¡: pip install -r requirements.txt
-# 4. ¼­¹ö ½ÇÇà: uvicorn app.main:app --reload
-# 5. API ½ÇÇà(swagger): http://127.0.0.1:8000/docs
+# [ì„¤ì¹˜ ê°€ì´ë“œ]
+# 0. íŒŒì´ì¬ ë²„ì „: 3.11.9 (3.14ë²„ì „ì€ ì„¤ì¹˜ ì•ˆë¨)
+# 1. ê°€ìƒí™˜ê²½ ìƒì„±: python -m venv venv
+# 2. ê°€ìƒí™˜ê²½ í™œì„±: source venv/bin/activate (Mac/Linux) or venv\Scripts\activate (Win)
+# 3. ì „ì²´ ì„¤ì¹˜: pip install -r requirements.txt
+# 4. ì„œë²„ ì‹¤í–‰: uvicorn app.main:app --reload
+# 5. API ì‹¤í–‰(swagger): http://127.0.0.1:8000/docs
 # ==========================================
