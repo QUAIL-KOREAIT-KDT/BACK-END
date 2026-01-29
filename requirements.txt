@@ -10,6 +10,8 @@ uvicorn[standard]>=0.23.0
 pydantic-settings>=2.0.0
 python-multipart>=0.0.6
 requests>=2.31.0
+httpx>=0.24.0           
+apscheduler       
 
 # [2] Database (Async MySQL)
 sqlalchemy>=2.0.0
@@ -33,6 +35,9 @@ openai>=1.0.0
 chromadb>=0.4.0
 tiktoken
 sentence-transformers
+
+# [7] Notification (FCM Push)
+firebase-admin>=6.2.0   # [NEW] 앱 푸시 알림 전송용
 
 # ==========================================
 # [설치 가이드]

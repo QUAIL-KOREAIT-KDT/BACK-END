@@ -10,9 +10,13 @@ from app.domains.home.models import Weather
 from app.domains.diagnosis.models import Diagnosis
 from app.domains.dictionary.models import Dictionary
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from app.core.scheduler import fetch_daily_weather_job, calculate_daily_risk_job, send_morning_notification_job, initialize_weather_data
+
 # 전역 객체 저장소
 ml_models = {}
 vector_db = {}
+scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,10 +33,29 @@ async def lifespan(app: FastAPI):
     print("🚀 [System] YOLO AI 모델 및 Vector DB 로드 중...")
     ml_models["yolo"] = "DUMMY_YOLO_OBJECT" 
     
+
+    # [시작 시 실행]
+    print("🚀 서버 시작: 스케줄러를 가동합니다.")
+    
+    # 1. 00:00 날씨 수집
+    scheduler.add_job(fetch_daily_weather_job, 'cron', hour=0, minute=0)
+    
+    # 2. 01:00 위험도 계산
+    scheduler.add_job(calculate_daily_risk_job, 'cron', hour=1, minute=0)
+    
+    # 3. 08:00 알림 발송
+    scheduler.add_job(send_morning_notification_job, 'cron', hour=8, minute=0)
+    
+    scheduler.start()
+    # await를 사용하여 이 작업이 끝날 때까지 서버가 대기하도록 함 (데이터 확보 우선)
+    await initialize_weather_data()
+
     yield # 서버 실행 중 (여기서 멈춰있음)
     
     # [Shutdown] 서버 종료 시 실행
-    print("🛑 [System] 리소스 해제")
+    # [종료 시 실행]
+    print("🛑 서버 종료: 스케줄러를 정지합니다.")
+    scheduler.shutdown()
     ml_models.clear()
     vector_db.clear()
     

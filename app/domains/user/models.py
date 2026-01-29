@@ -1,6 +1,6 @@
 # BACK-END/app/domains/users/models.py
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, BOOLEAN
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -38,6 +38,9 @@ class User(Base):
 
     # 사용자 실내 습도
     indoor_humidity = Column(Float, nullable=True)
+
+    # 알림 설정
+    notification_settings = Column(Boolean, nullable=True)
 
     # 가입일
     created_at = Column(DateTime(timezone=True), server_default=func.now())

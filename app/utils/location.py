@@ -4,7 +4,7 @@ import math
 import requests
 from app.core.config import settings
 
-# [추가] 관리할 주요 도시 목록 (사용자 제공)
+# 주요 도시 목록
 MAJOR_CITIES = [
   { "name": "서울", "nx": 60, "ny": 127 },
   { "name": "인천", "nx": 55, "ny": 124 },
@@ -21,10 +21,14 @@ MAJOR_CITIES = [
 ]
 
 def get_lat_lon_from_address(address: str):
-    # (기존 코드와 동일)
+    """
+    주소(address)를 입력받아 위도(y), 경도(x), 표준 주소명(address_name)을 반환합니다.
+    Return: (lat, lon, standard_name) 또는 (None, None, None)
+    """
+    # 1. API 키 확인
     if not settings.KAKAO_REST_API_KEY:
         print("❌ 오류: .env에 KAKAO_REST_API_KEY가 없습니다.")
-        return None, None
+        return None, None, None # [수정] 3개 값 반환
 
     url = "https://dapi.kakao.com/v2/local/search/address.json"
     headers = {"Authorization": f"KakaoAK {settings.KAKAO_REST_API_KEY}"}
@@ -32,31 +36,39 @@ def get_lat_lon_from_address(address: str):
 
     try:
         response = requests.get(url, headers=headers, params=params, timeout=5)
+        
+        # 2. HTTP 에러 체크
         if response.status_code != 200:
-            return None, None
+            print(f"❌ 카카오 API 호출 실패 (Code: {response.status_code}): {response.text}")
+            return None, None, None # [수정] 3개 값 반환
+            
         result = response.json()
+        
+        # 3. 검색 결과 확인
         if result['documents']:
             doc = result['documents'][0]
             x = doc['x'] # 경도
             y = doc['y'] # 위도
             
-            # [추가] 카카오가 정제해준 표준 주소명 가져오기
-            # 'road_address'가 있으면 도로명, 없으면 지번 주소 사용
+            # 표준 주소명 추출
             standard_name = doc['address_name'] 
             if doc.get('road_address'):
                 standard_name = doc['road_address']['address_name']
+                
+            print(f"📍 주소 변환 성공: {address} -> {standard_name} ({y}, {x})")
+            return float(y), float(x), standard_name # [정상] 3개 값 반환
+        else:
+            print(f"⚠️ 검색 결과 없음: {address}")
+            return None, None, None # [수정] 3개 값 반환
             
-            print(f"📍 주소 변환: {address} -> {standard_name} ({y}, {x})")
-            
-            # [수정] 좌표와 함께 '표준 주소 이름'도 반환
-            return float(y), float(x), standard_name
-        return None, None
     except Exception as e:
-        print(f"❌ 에러 발생: {e}")
-        return None, None
+        print(f"❌ 주소 변환 중 예외 발생: {e}")
+        return None, None, None # [수정] 3개 값 반환
 
 def map_to_grid(lat, lon, code=0):
-    # (기존 코드와 동일 - 좌표를 NX, NY로 변환)
+    """
+    위도/경도 -> 기상청 격자(NX, NY) 변환
+    """
     RE = 6371.00877
     GRID = 5.0
     SLAT1 = 30.0
@@ -97,7 +109,6 @@ def map_to_grid(lat, lon, code=0):
 
     return nx, ny
 
-# [신규 함수] 계산된 NX, NY와 가장 가까운 주요 도시 찾기
 def find_nearest_city(target_nx, target_ny):
     """
     사용자의 NX, NY와 가장 가까운 주요 도시 정보를 반환합니다.
@@ -106,7 +117,6 @@ def find_nearest_city(target_nx, target_ny):
     min_distance = float('inf')
 
     for city in MAJOR_CITIES:
-        # 거리 계산 (피타고라스 정의: (x1-x2)^2 + (y1-y2)^2)
         dist = (city["nx"] - target_nx) ** 2 + (city["ny"] - target_ny) ** 2
         
         if dist < min_distance:

@@ -1,7 +1,7 @@
 # BACK-END/app/domains/diagnosis/models.py
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, Text
-from sqlalchemy.sql import func  # [중요] DB의 함수(NOW)를 쓰기 위해 필요
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Enum
+from sqlalchemy.sql import func
 from app.core.database import Base
 
 class Diagnosis(Base):
@@ -32,3 +32,26 @@ class Diagnosis(Base):
 
     # 진단 솔루션
     model_solution = Column(Text, nullable=False)
+
+
+class MoldRisk(Base):
+    """
+    [Source 4] 매일 01:00에 계산된 사용자별 곰팡이 위험도 히스토리
+    """
+    __tablename__ = "mold_risks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # 위험도 수치 (0~100점 등)
+    risk_score = Column(Float, nullable=False)
+    # 위험 단계 (좋음, 주의, 경고, 위험)
+    risk_level = Column(String(20), nullable=False)
+    
+    # 계산에 사용된 기준 날짜 (예: 2026-01-30)
+    target_date = Column(DateTime(timezone=True), nullable=False)
+    
+    # 사용자에게 보낼 코멘트 (예: "지하층이라 습도가 높습니다. 환기 필수!")
+    message = Column(Text, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

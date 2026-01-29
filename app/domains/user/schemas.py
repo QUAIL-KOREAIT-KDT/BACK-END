@@ -22,6 +22,7 @@ class UserProfileUpdate(BaseModel):
     window_direction: Optional[Literal["S", "N", "O"]] = None
     indoor_temp: Optional[float] = None
     indoor_humidity: Optional[float] = None
+    notification_settings: Optional[bool] = None
 
 
 #

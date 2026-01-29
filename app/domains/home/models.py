@@ -20,7 +20,6 @@ class Weather(Base):
     
     # 파생 데이터
     dew_point = Column(Float, nullable=True)     # 이슬점
-    mold_index = Column(Integer, nullable=True)  # 곰팡이 지수
 
     # [중요] 날짜 + 좌표가 같으면 중복 저장 금지
     __table_args__ = (
