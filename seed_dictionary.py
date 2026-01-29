@@ -1,7 +1,11 @@
 import asyncio
-from app.core.database import AsyncSessionLocal, engine
+import os
+import uuid
+import mimetypes
+from app.core.database import AsyncSessionLocal
 from app.domains.dictionary.models import Dictionary
-from sqlalchemy import text
+from app.utils.storage import StorageClient
+from app.core.config import settings
 
 # 정리해주신 곰팡이 데이터 리스트
 molds_data = [
@@ -167,14 +171,65 @@ molds_data = [
     }
 ]
 
-async def seed():
-    async with AsyncSessionLocal() as db:
-        print("🌱 데이터 삽입 시작...")
+# 로컬 파일을 S3에 업로드하는 함수
+def upload_local_file_to_s3(client: StorageClient, web_path: str) -> str:
+    """
+    web_path: /static/images/filename.jpg
+    Returns: S3 URL
+    """
+    # 1. 웹 경로를 실제 파일 시스템 경로로 변환
+    # 예: /static/images/G1.jpg -> app/static/images/G1.jpg (현재 실행 위치 기준)
+    if web_path.startswith("/"):
+        relative_path = "app" + web_path
+    else:
+        relative_path = "app/" + web_path
         
-        # 기존 데이터가 있다면 초기화(선택)
-        # await db.execute(text("TRUNCATE TABLE dictionary")) 
+    # 2. 파일 존재 확인
+    if not os.path.exists(relative_path):
+        print(f"⚠️ 파일 없음: {relative_path} -> 스킵")
+        return web_path # 파일 없으면 원래 경로 반환
+
+    # 3. 파일 메타데이터 준비 (확장자, MIME타입, 랜덤파일명)
+    file_extension = relative_path.split(".")[-1]
+    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+    mime_type, _ = mimetypes.guess_type(relative_path)
+    if not mime_type:
+        mime_type = "application/octet-stream"
+
+    try:
+        # 4. 파일 열어서 S3 업로드
+        with open(relative_path, "rb") as f:
+            print(f"⬆️ 업로드 중: {relative_path} -> {unique_filename}")
+            client.s3_client.upload_fileobj(
+                f,
+                client.bucket_name,
+                unique_filename,
+                ExtraArgs={'ContentType': mime_type}
+            )
+        
+        # 5. S3 URL 생성
+        s3_url = f"https://{client.bucket_name}.s3.{settings.AWS_REGION_NAME}.amazonaws.com/{unique_filename}"
+        return s3_url
+
+    except Exception as e:
+        print(f"❌ 업로드 실패 ({relative_path}): {e}")
+        return web_path
+
+async def seed():
+    # S3 클라이언트 초기화
+    storage = StorageClient()
+    
+    async with AsyncSessionLocal() as db:
+        print("🌱 데이터 삽입 및 이미지 업로드 시작...")
         
         for item in molds_data:
+            # 1. 메인 이미지 S3 업로드 및 경로 교체
+            item["image_path"] = upload_local_file_to_s3(storage, item["image_path"])
+            
+            # 2. 상세 이미지 S3 업로드 및 경로 교체
+            item["detail_image_path"] = upload_local_file_to_s3(storage, item["detail_image_path"])
+
+            # 3. DB 객체 생성
             mold = Dictionary(
                 label=item["label"],
                 name=item["name"],
@@ -188,7 +243,7 @@ async def seed():
             db.add(mold)
         
         await db.commit()
-        print("✅ 모든 도감 데이터 저장 완료!")
+        print("✅ 모든 이미지 S3 업로드 및 도감 데이터 저장 완료!")
 
 if __name__ == "__main__":
     asyncio.run(seed())

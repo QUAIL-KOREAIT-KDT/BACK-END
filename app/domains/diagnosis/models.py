@@ -24,7 +24,7 @@ class Diagnosis(Base):
     image_path = Column(String(255), nullable=False)
 
     # 곰팡이 위치 => 창문, 벽지, 욕실, 천장, 주방, 음식, 베란다, 에어컨, 거실, 세면대, 변기
-    mold_location = Column(Enum("Windows", "wallpaper", "bathroom", "ceiling", "kitchen", "food", "veranda", "air_conditioner", "living_room", "sink", "toilet", name='mold_location_types'))
+    mold_location = Column(Enum("windows", "wallpaper", "bathroom", "ceiling", "kitchen", "food", "veranda", "air_conditioner", "living_room", "sink", "toilet", name='mold_location_types'))
 
     # 2. 가입일 [datetime NOW()] 해결
     # server_default=func.now() : 데이터가 들어갈 때 DB가 알아서 시간을 찍어줌
