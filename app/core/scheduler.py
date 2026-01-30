@@ -18,8 +18,12 @@ async def fetch_daily_weather_job():
     
     client = WeatherClient()
     success_count = 0
+    now = datetime.now()
 
     async with AsyncSessionLocal() as db:
+        # 2. [과거 데이터 삭제] 현재 기준 과거의 데이터는 삭제
+        await db.execute(delete(Weather).where(Weather.date < now))
+
         for city in MAJOR_CITIES:
             nx, ny = city['nx'], city['ny']
             
@@ -27,41 +31,46 @@ async def fetch_daily_weather_job():
             if not items:
                 continue
 
-            # 데이터 피벗 (가로세로 변환)
+            # 데이터 피벗 및 1. [중복 제거] 의미가 같은 데이터는 없도록 딕셔너리 활용
             grouped_data = {}
             for item in items:
                 cat = item['category']
                 if cat not in ['TMP', 'REH', 'POP']: continue
                 
                 dt_str = f"{item['fcstDate']}{item['fcstTime']}"
-                if dt_str not in grouped_data: grouped_data[dt_str] = {}
+                if dt_str not in grouped_data: 
+                    grouped_data[dt_str] = {}
                 grouped_data[dt_str][cat] = float(item['fcstValue'])
 
-            # DB 객체 생성 (여기서 이슬점 계산!)
             new_weathers = []
             for dt_str, val in grouped_data.items():
                 if 'TMP' in val and 'REH' in val and 'POP' in val:
                     dt = datetime.strptime(dt_str, "%Y%m%d%H%M")
                     
-                    # [★수정] 이슬점(Dew Point) 계산 로직 추가
-                    # 공식: T - ((100 - RH) / 5)
-                    calc_dew_point = val['TMP'] - ((100 - val['REH']) / 5)
-                    
-                    new_weathers.append(Weather(
-                        date=dt, nx=nx, ny=ny,
-                        temp=val['TMP'], 
-                        humid=val['REH'], 
-                        rain_prob=int(val['POP']),
-                        dew_point=calc_dew_point
-                    ))
+                    # 3. [시간 제한] 09시부터 23시까지의 데이터만 연산하여 저장
+                    if 9 <= dt.hour <= 23:
+                        # 이슬점(Dew Point) 계산
+                        calc_dew_point = val['TMP'] - ((100 - val['REH']) / 5)
+                        
+                        new_weathers.append(Weather(
+                            date=dt, nx=nx, ny=ny,
+                            temp=val['TMP'], 
+                            humid=val['REH'], 
+                            rain_prob=int(val['POP']),
+                            dew_point=calc_dew_point
+                        ))
             
             if not new_weathers: continue
 
             try:
+                # [중복 방지] 동일 좌표/시간의 신규 데이터 반영 전 기존 데이터 삭제
                 min_date = min(w.date for w in new_weathers)
                 await db.execute(delete(Weather).where(
-                    Weather.nx == nx, Weather.ny == ny, Weather.date >= min_date
+                    Weather.nx == nx, 
+                    Weather.ny == ny, 
+                    Weather.date >= min_date
                 ))
+                
                 db.add_all(new_weathers)
                 await db.commit()
                 success_count += 1
@@ -69,58 +78,67 @@ async def fetch_daily_weather_job():
                 await db.rollback()
                 print(f"❌ {city['name']} 저장 실패: {e}")
 
-    print(f"🏁 [Weather Job] {success_count}/12 개 도시 이슬점 포함 업데이트 완료")
-
 # ====================================================
 # [Task 2] 01:00 - '최저 이슬점' 기준 위험도 계산
 # ====================================================
 async def calculate_daily_risk_job():
     print(f"⏰ [Risk Job] 곰팡이 위험도 계산 시작 (기준: 최저 이슬점)")
     
+    # 오늘 날짜 범위 설정 (00:00:00 기준)
+    target_date = datetime.now().date()
+    start_dt = datetime.combine(target_date, datetime.min.time())
+
     async with AsyncSessionLocal() as db:
+        # 1. [과거 데이터 삭제] 오늘 기준 과거의 위험도 데이터는 모두 삭제
+        # 이를 통해 주소가 바뀌었거나 서비스 이용을 중단한 유저의 오래된 기록을 정리합니다.
+        await db.execute(delete(MoldRisk).where(MoldRisk.target_date < start_dt))
+        await db.commit() # 삭제 확정
+
         users_result = await db.execute(select(User))
         users = users_result.scalars().all()
-        
-        # 오늘 날짜 범위 (00:00 ~ 23:59)
-        target_date = datetime.now().date()
-        start_dt = datetime.combine(target_date, datetime.min.time())
-        end_dt = datetime.combine(target_date, datetime.max.time())
         
         count = 0
         for user in users:
             if not user.grid_nx: continue
             
-            # 1. 유저 지역의 오늘 날씨 모두 가져오기
+            # 유저 지역의 오늘 날씨 조회
             w_res = await db.execute(select(Weather).where(
                 Weather.nx == user.grid_nx,
                 Weather.ny == user.grid_ny,
-                Weather.date >= start_dt,
-                Weather.date <= end_dt
+                Weather.date >= start_dt
             ))
             weather_logs = w_res.scalars().all()
             
-            if not weather_logs: continue
+            # 이슬점 데이터(None 제외)가 있는 경우에만 계산 진행
+            valid_weathers = [w for w in weather_logs if w.dew_point is not None]
+            if not valid_weathers: continue
 
-            # 2. [★핵심] 이슬점이 가장 낮은 데이터 1개 추출 (User Requirement)
-            # lambda w: w.dew_point를 키로 사용하여 최솟값 찾기
-            target_weather = min(weather_logs, key=lambda w: w.dew_point)
-            
-            # 3. 위험도 알고리즘 적용 (선택된 1개의 날씨 데이터 사용)
+            target_weather = min(valid_weathers, key=lambda w: w.dew_point)
             score, level, msg = calculate_mold_algorithm(user, target_weather)
             
-            # 4. 결과 저장
-            risk_record = MoldRisk(
-                user_id=user.id,
-                risk_score=score,
-                risk_level=level,
-                target_date=start_dt,
-                message=msg
-            )
-            db.add(risk_record)
+            # 2. [Upsert] 사용자별 1:1 관계 유지
+            # 유저당 하나의 최신 행만 존재하도록 처리합니다.
+            stmt = select(MoldRisk).where(MoldRisk.user_id == user.id)
+            res = await db.execute(stmt)
+            existing_risk = res.scalar_one_or_none()
+
+            if existing_risk:
+                existing_risk.risk_score = score
+                existing_risk.risk_level = level
+                existing_risk.target_date = start_dt
+                existing_risk.message = msg
+            else:
+                db.add(MoldRisk(
+                    user_id=user.id,
+                    risk_score=score,
+                    risk_level=level,
+                    target_date=start_dt,
+                    message=msg
+                ))
             count += 1
         
         await db.commit()
-        print(f"🏁 [Risk Job] {count}명 위험도 계산 완료")
+        print(f"🏁 [Risk Job] {count}명 위험도 갱신 완료 (과거 데이터 정리 포함)")
 
 def calculate_mold_algorithm(user, weather):
     """

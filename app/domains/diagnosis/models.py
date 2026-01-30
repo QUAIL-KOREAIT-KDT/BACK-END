@@ -41,7 +41,7 @@ class MoldRisk(Base):
     __tablename__ = "mold_risks"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
     
     # 위험도 수치 (0~100점 등)
     risk_score = Column(Float, nullable=False)
