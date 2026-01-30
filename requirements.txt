@@ -37,14 +37,4 @@ tiktoken
 sentence-transformers
 
 # [7] Notification (FCM Push)
-firebase-admin>=6.2.0   # [NEW] 앱 푸시 알림 전송용
-
-# ==========================================
-# [설치 가이드]
-# 0. 파이썬 버전: 3.11.9 (3.14버전은 설치 안됨)
-# 1. 가상환경 생성: python -m venv venv
-# 2. 가상환경 활성: source venv/bin/activate (Mac/Linux) or venv\Scripts\activate (Win)
-# 3. 전체 설치: pip install -r requirements.txt
-# 4. 서버 실행: uvicorn app.main:app --reload
-# 5. API 실행(swagger): http://127.0.0.1:8000/docs
-# ==========================================
+firebase-admin>=6.2.0   
