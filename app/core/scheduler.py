@@ -9,6 +9,7 @@ from app.domains.user.models import User
 from app.domains.diagnosis.models import MoldRisk
 from app.domains.home.client import WeatherClient
 from app.utils.location import MAJOR_CITIES
+from app.domains.home.utils import calculate_predicted_mold_risk
 
 # ====================================================
 # [Task 1] 00:00 - 날씨 수집 및 '이슬점 계산' 저장
@@ -78,21 +79,16 @@ async def fetch_daily_weather_job():
                 await db.rollback()
                 print(f"❌ {city['name']} 저장 실패: {e}")
 
-# ====================================================
-# [Task 2] 01:00 - '최저 이슬점' 기준 위험도 계산
-# ====================================================
+# [Task 2] 곰팡이 위험도 계산 Job (여기가 핵심 변경!)
 async def calculate_daily_risk_job():
-    print(f"⏰ [Risk Job] 곰팡이 위험도 계산 시작 (기준: 최저 이슬점)")
+    print(f"⏰ [Risk Job] 과학적 곰팡이 위험 예측 시뮬레이션 시작...")
     
-    # 오늘 날짜 범위 설정 (00:00:00 기준)
     target_date = datetime.now().date()
     start_dt = datetime.combine(target_date, datetime.min.time())
 
     async with AsyncSessionLocal() as db:
-        # 1. [과거 데이터 삭제] 오늘 기준 과거의 위험도 데이터는 모두 삭제
-        # 이를 통해 주소가 바뀌었거나 서비스 이용을 중단한 유저의 오래된 기록을 정리합니다.
         await db.execute(delete(MoldRisk).where(MoldRisk.target_date < start_dt))
-        await db.commit() # 삭제 확정
+        await db.commit()
 
         users_result = await db.execute(select(User))
         users = users_result.scalars().all()
@@ -101,23 +97,39 @@ async def calculate_daily_risk_job():
         for user in users:
             if not user.grid_nx: continue
             
-            # 유저 지역의 오늘 날씨 조회
+            # 유저 지역의 '가장 습하고 추운' 최악의 날씨 조건을 찾음
             w_res = await db.execute(select(Weather).where(
                 Weather.nx == user.grid_nx,
                 Weather.ny == user.grid_ny,
                 Weather.date >= start_dt
             ))
             weather_logs = w_res.scalars().all()
-            
-            # 이슬점 데이터(None 제외)가 있는 경우에만 계산 진행
+            if not weather_logs: continue
+
+            # [로직 변경] 이슬점이 가장 낮은(결로 위험이 큰) 시간대의 날씨 선택
+            # dew_point가 None이 아닌 것 중 최솟값
             valid_weathers = [w for w in weather_logs if w.dew_point is not None]
             if not valid_weathers: continue
-
             target_weather = min(valid_weathers, key=lambda w: w.dew_point)
-            score, level, msg = calculate_mold_algorithm(user, target_weather)
+
+            # ---------------------------------------------------------
+            # [핵심] 여기서 utils.py의 'calculate_predicted_mold_risk' 호출
+            # ---------------------------------------------------------
+            risk_result = calculate_predicted_mold_risk(
+                t_out=target_weather.temp,
+                rh_out=target_weather.humid,
+                direction=user.window_direction,
+                floor_type=user.underground,
+                # ▼ 사용자 데이터 주입 (DB에 값이 없으면 None이 들어가며 자동 시뮬레이션 전환)
+                t_in_real=user.indoor_temp,
+                rh_in_real=user.indoor_humidity
+            )
             
-            # 2. [Upsert] 사용자별 1:1 관계 유지
-            # 유저당 하나의 최신 행만 존재하도록 처리합니다.
+            score = risk_result['score']
+            level = risk_result['status']
+            msg = risk_result['message']
+            
+            # DB 저장 (Upsert)
             stmt = select(MoldRisk).where(MoldRisk.user_id == user.id)
             res = await db.execute(stmt)
             existing_risk = res.scalar_one_or_none()
@@ -138,58 +150,12 @@ async def calculate_daily_risk_job():
             count += 1
         
         await db.commit()
-        print(f"🏁 [Risk Job] {count}명 위험도 갱신 완료 (과거 데이터 정리 포함)")
+        print(f"🏁 [Risk Job] {count}명 과학적 위험 분석 완료")
 
-def calculate_mold_algorithm(user, weather):
-    """
-    [곰팡이 위험도 계산 로직]
-    Input: User정보, 선택된 날씨(이슬점 가장 낮은 시간대)
-    """
-    base_score = 40 # 기본 점수
-    
-    # 1. [날씨 요인] 이슬점이 낮을수록 위험하다고 가정 (사용자 정의)
-    # 예: 이슬점이 10도 이하면 +20점
-    if weather.dew_point is not None and weather.dew_point < 10:
-        base_score += 20
-        
-    # 2. [날씨 요인] 습도 반영
-    if weather.humid > 70:
-        base_score += 15
-        
-    # 3. [환경 요인] 반지하 여부
-    if user.underground in ['semi-basement', 'underground']:
-        base_score += 15
-        
-    # 4. [환경 요인] 창문 방향 (북향 N은 햇빛이 덜 들어서 위험)
-    if user.window_direction == 'N':
-        base_score += 10
 
-    # 점수 보정 (0~100)
-    final_score = min(max(base_score, 0), 100)
-    
-    # 레벨 판정
-    if final_score >= 80: 
-        level = "위험"
-        msg = "곰팡이 발생 위험이 매우 높습니다! 즉시 환기하세요."
-    elif final_score >= 60: 
-        level = "경고"
-        msg = "습도가 높습니다. 제습기 사용을 권장합니다."
-    elif final_score >= 40: 
-        level = "주의"
-        msg = "실내 환기에 신경 써주세요."
-    else: 
-        level = "양호"
-        msg = "현재 쾌적한 상태입니다."
-        
-    return final_score, level, msg
-
-# [Task 3] 알림 발송 등... (그대로 유지)
 async def send_morning_notification_job():
     pass
 
-# ====================================================
-# [Initialization] 서버 시작 시 실행
-# ====================================================
 async def initialize_weather_data():
     print("🔎 [Init] 데이터 무결성 검사...")
     async with AsyncSessionLocal() as db:

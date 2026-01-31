@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domains.home.models import Weather
 from app.domains.user.models import User
 from app.domains.home.client import WeatherClient
-from app.domains.home.schemas import WeatherDetail, VentilationTime, HomeResponse
+from app.domains.home.schemas import WeatherDetail, VentilationTime, HomeResponse, RiskInfo
+from app.domains.home.utils import calculate_predicted_mold_risk
 
 class WeatherService:
     def __init__(self, db: AsyncSession):
@@ -42,6 +43,11 @@ class WeatherService:
         result = await self.db.execute(query)
         weather_list = result.scalars().all()
 
+        current_weather_obj = None
+        if weather_list:
+             # 리스트는 시간순 정렬되어 있으므로 첫 번째가 현재와 가장 가까움
+             current_weather_obj = weather_list[0]
+
         # 5. [응답 1] 오늘 날씨 리스트 구성
         today_forecast = []
         today_str = now.strftime("%Y-%m-%d")
@@ -63,10 +69,31 @@ class WeatherService:
         # 6. [응답 2] 환기 추천 알고리즘
         ventilation_recs = self._calculate_ventilation_times(weather_list)
 
+        # 7. [응답 3] 실시간 곰팡이 위험도 계산 (NEW)
+        risk_data = None
+        if current_weather_obj and user.window_direction:
+             # utils.py의 하이브리드 엔진 직접 호출
+             calc_res = calculate_predicted_mold_risk(
+                t_out=current_weather_obj.temp,
+                rh_out=current_weather_obj.humid,
+                direction=user.window_direction,
+                floor_type=user.underground,
+                t_in_real=user.indoor_temp,
+                rh_in_real=user.indoor_humidity
+             )
+             
+             risk_data = RiskInfo(
+                 score=calc_res['score'],
+                 level=calc_res['status'],
+                 message=calc_res['message'],
+                 details=calc_res.get('details') # 시뮬레이션 상세 수치 포함
+             )
+
         return HomeResponse(
             region_address=address,
             current_weather=today_forecast,
-            ventilation_times=ventilation_recs
+            ventilation_times=ventilation_recs,
+            risk_info=risk_data  # 추가된 필드 반환
         )
 
     async def _get_user(self, user_id: int):

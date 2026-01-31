@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 from typing import List
 from datetime import datetime
+from typing import List, Optional
 
 class WeatherDetail(BaseModel):
     time: str          # "14:00" 형태
@@ -17,7 +18,15 @@ class VentilationTime(BaseModel):
     end_time: str      # "17:00"
     description: str   # "환기하기 딱 좋은 시간이에요! (평균 습도 35%)"
 
+# [NEW] 위험도 정보 스키마 추가
+class RiskInfo(BaseModel):
+    score: float
+    level: str
+    message: str
+    details: Optional[dict] = None  # 벽 온도 등 상세 정보 (디버깅/표시용)
+
 class HomeResponse(BaseModel):
     region_address: str
-    current_weather: List[WeatherDetail]       # 1. 오늘 현재시간 이후 예보
-    ventilation_times: List[VentilationTime]   # 2. 환기 추천 시간대
+    current_weather: List[WeatherDetail]
+    ventilation_times: List[VentilationTime]
+    risk_info: Optional[RiskInfo] = None # 추가

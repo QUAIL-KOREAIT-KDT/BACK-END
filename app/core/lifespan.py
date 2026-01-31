@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     print("🚀 서버 시작: 스케줄러를 가동합니다.")
     
     # 1. 00:00 날씨 수집 (11:12분으로 임의 수정)
-    scheduler.add_job(fetch_daily_weather_job, 'cron', hour=12, minute=22)
+    scheduler.add_job(fetch_daily_weather_job, 'cron', hour=0, minute=0)
     
     # 2. 01:00 위험도 계산
     scheduler.add_job(calculate_daily_risk_job, 'cron', hour=1, minute=0)

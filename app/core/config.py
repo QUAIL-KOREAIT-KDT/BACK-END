@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     AWS_BUCKET_NAME: str | None = None
     AWS_REGION_NAME: str = "ap-northeast-2"
 
-    OPENAI_API_KEY: str | None = None
+    GEMINI_API_KEY: str | None = None
 
     class Config:
         # .env 파일을 읽어서 위 변수들에 자동으로 값을 채워줍니다.
