@@ -22,3 +22,4 @@ class AuthResponse(BaseModel):
     user_id: int
     is_new_user: bool
     nickname: str | None
+    

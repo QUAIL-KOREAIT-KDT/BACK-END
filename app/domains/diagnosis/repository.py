@@ -2,6 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.domains.diagnosis.models import Diagnosis
+from sqlalchemy import select, delete
 
 class DiagnosisRepository:
     def __init__(self, db: AsyncSession):
@@ -23,3 +24,16 @@ class DiagnosisRepository:
         await self.db.refresh(new_diagnosis)
         
         return new_diagnosis
+    
+    async def get_diagnosis_by_user_id(self, db, user_id: int) -> list[Diagnosis]:
+        query = select(Diagnosis).where(Diagnosis.user_id == user_id).order_by(Diagnosis.created_at.desc())
+        result = await db.execute(query)
+        return result.scalars().all()
+    # select * from Diagnosis where 컬럼user_id = 변수user_id and 컬럼id = 변수id
+    
+
+    async def delete_diagnosis_info(self, db, id: int):
+        stmt = delete(Diagnosis).where(Diagnosis.id == id)
+        await db.execute(stmt)
+        await db.commit()
+        return True

@@ -16,6 +16,7 @@ from app.domains.dictionary.router import router as dictionary_router
 from app.domains.search.router import router as search_router
 from app.domains.fortune.router import router as fortune_router
 from app.domains.auth.router import router as auth_router 
+from app.domains.my_page.router import router as my_page_router
 
 # jwt 토큰 검증 테스트
 from app.domains.auth.jwt_handler import verify_token
@@ -49,6 +50,7 @@ app.include_router(diagnosis_router, prefix="/api/diagnosis", tags=["Diagnosis"]
 app.include_router(dictionary_router, prefix="/api/dictionary", tags=["Dictionary"], dependencies=[Depends(verify_token)])
 app.include_router(search_router, prefix="/api/search", tags=["RAG Search"], dependencies=[Depends(verify_token)])
 app.include_router(fortune_router, prefix="/api/fortune", tags=["Fortune"], dependencies=[Depends(verify_token)])
+app.include_router(my_page_router, prefix="/api/my_page", tags=["My_Page"], dependencies=[Depends(verify_token)])
 
 
 @app.get("/")
