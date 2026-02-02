@@ -1,10 +1,10 @@
 # BACK-END/app/domains/search/router.py
 
 from fastapi import APIRouter
-from app.domains.search.service import RAGService
+from app.domains.search.service import SearchService
 
 router = APIRouter()
-service = RAGService()
+service = SearchService()
 
 @router.get("/query")
 async def search_mold_info(q: str):
