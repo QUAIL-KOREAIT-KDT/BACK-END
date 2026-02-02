@@ -34,7 +34,7 @@ pillow>=10.0.0
 google-generativeai>=0.7.2
 chromadb>=0.4.0
 tiktoken
-sentence-transformers
+# sentence-transformers
 
 # [7] Notification (FCM Push)
 firebase-admin>=6.2.0   
