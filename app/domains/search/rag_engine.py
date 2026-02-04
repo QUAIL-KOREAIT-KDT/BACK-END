@@ -30,7 +30,18 @@ class RAGEngine:
 
         [데이터베이스 참고 정보]
         {context_text}
-        ... (생략: 기존 프롬프트 규칙) ...
+        [절대 규칙]
+        1. 반드시 아래 JSON Key 이름들을 정확히 지켜야 합니다. 다른 Key를 창조하지 마세요.
+        2. 데이터가 없으면 "정보 없음"이라고 적더라도 Key는 유지하세요.
+
+        [Target JSON Structure]
+        {{
+            "diagnosis": "String",
+            "FrequentlyVisitedAreas": ["String", "String"],
+            "solution": ["String", "String"],
+            "prevention": ["String", "String"],
+            "insight": "String"
+        }}
         """
 
         try:
