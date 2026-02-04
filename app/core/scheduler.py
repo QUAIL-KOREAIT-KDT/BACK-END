@@ -10,6 +10,9 @@ from app.domains.diagnosis.models import MoldRisk
 from app.domains.home.client import WeatherClient
 from app.utils.location import MAJOR_CITIES
 from app.domains.home.utils import calculate_predicted_mold_risk
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ====================================================
 # [Task 1] 00:00 - 날씨 수집 및 '이슬점 계산' 저장
@@ -154,7 +157,109 @@ async def calculate_daily_risk_job():
 
 
 async def send_morning_notification_job():
-    pass
+    """
+    매일 오전 8시 정기 알림 전송
+    - 알림 수신 ON 유저에게만 전송
+    - 각 유저의 오늘 최고 위험도 + 최적 환기 시간 전송
+    """
+    logger.info("📅 [매일 8시 알림] 시작...")
+    
+    # 지연 임포트 (순환 참조 방지)
+    from app.domains.notification.repository import notification_repository
+    from app.domains.notification.service import notification_service
+
+    async with AsyncSessionLocal() as db:
+        # 1. 알림 수신 활성화된 사용자 조회
+        users = await notification_repository.get_notification_enabled_users(db)
+        logger.info(f"알림 대상 사용자: {len(users)}명")
+
+        success_count = 0
+        fail_count = 0
+
+        # 2. 각 사용자에게 알림 전송
+        for user in users:
+            try:
+                # 사용자의 위험도 조회
+                risk_result = await db.execute(
+                    select(MoldRisk).where(MoldRisk.user_id == user.id)
+                )
+                mold_risk = risk_result.scalar_one_or_none()
+
+                if mold_risk:
+                    risk_percentage = int(mold_risk.risk_score)
+                else:
+                    risk_percentage = 0
+
+                # 환기 추천 시간 조회 (오늘 날씨 데이터 기반)
+                ventilation_time = await _get_best_ventilation_time(db, user)
+
+                # 알림 전송
+                await notification_service.send_daily_notification(
+                    db, user.id, risk_percentage, ventilation_time
+                )
+                success_count += 1
+
+            except Exception as e:
+                logger.error(f"User {user.id} 알림 전송 실패: {str(e)}")
+                fail_count += 1
+
+        # 3. 오래된 알림 삭제 (30일 이전)
+        deleted_count = await notification_repository.delete_old_notifications(db)
+        if deleted_count > 0:
+            logger.info(f"🗑️ 오래된 알림 {deleted_count}개 삭제")
+
+        logger.info(f"📅 [매일 8시 알림] 완료 - 성공: {success_count}, 실패: {fail_count}")
+
+
+async def _get_best_ventilation_time(db, user) -> str:
+    """
+    사용자 지역의 오늘 최적 환기 시간 조회
+    """
+    if not user.grid_nx or not user.grid_ny:
+        return "오전 10시~12시"  # 기본값
+
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = now.replace(hour=23, minute=59, second=59)
+
+    # 오늘의 날씨 데이터 조회
+    result = await db.execute(
+        select(Weather)
+        .where(
+            Weather.nx == user.grid_nx,
+            Weather.ny == user.grid_ny,
+            Weather.date >= today_start,
+            Weather.date <= today_end
+        )
+        .order_by(Weather.date.asc())
+    )
+    weather_list = result.scalars().all()
+
+    if not weather_list:
+        return "오전 10시~12시"
+
+    # 환기하기 좋은 시간대 찾기 (습도 낮고, 비올확률 낮은 시간)
+    MIN_TEMP, MAX_TEMP = -4, 27
+    MAX_HUMID, MAX_RAIN = 60, 20
+
+    good_times = []
+    for w in weather_list:
+        is_good = (MIN_TEMP <= w.temp <= MAX_TEMP) and \
+                  (w.humid <= MAX_HUMID) and \
+                  (w.rain_prob <= MAX_RAIN)
+        if is_good:
+            good_times.append(w)
+
+    if good_times:
+        # 가장 좋은 시간대 반환 (첫 번째 ~ 마지막)
+        if len(good_times) >= 2:
+            start_time = good_times[0].date.strftime("%H시")
+            end_time = good_times[-1].date.strftime("%H시")
+            return f"{start_time}~{end_time}"
+        else:
+            return good_times[0].date.strftime("%H시경")
+    
+    return "환기 적합 시간 없음 (실내 환기 권장)"
 
 async def initialize_weather_data():
     print("🔎 [Init] 데이터 무결성 검사...")

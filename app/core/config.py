@@ -28,6 +28,9 @@ class Settings(BaseSettings):
 
     GEMINI_API_KEY: str | None = None
 
+    # Firebase 설정 (FCM 푸시 알림용)
+    FIREBASE_CREDENTIALS_PATH: str | None = None
+
     class Config:
         # .env 파일을 읽어서 위 변수들에 자동으로 값을 채워줍니다.
         env_file = ".env"

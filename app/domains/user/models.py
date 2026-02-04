@@ -39,8 +39,13 @@ class User(Base):
     # 사용자 실내 습도
     indoor_humidity = Column(Float, nullable=True)
 
-    # 알림 설정
-    notification_settings = Column(Boolean, nullable=True)
+    # ========== 알림 관련 필드 ==========
+    # 알림 수신 설정 (True: ON, False: OFF)
+    notification_settings = Column(Boolean, default=True, nullable=True)
+
+    # FCM 토큰 (푸시 알림 전송용)
+    fcm_token = Column(String(255), nullable=True)
+    # ====================================
 
     # 가입일
     created_at = Column(DateTime(timezone=True), server_default=func.now())
