@@ -97,7 +97,6 @@ class UserService:
         # 1. 기존 데이터 삭제 (오늘 날짜 이후 데이터 리셋)
         await db.execute(delete(MoldRisk).where(
             MoldRisk.user_id == user.id,
-            MoldRisk.target_date >= start_dt
         ))
 
         # 2. 해당 지역 날씨 데이터 조회
