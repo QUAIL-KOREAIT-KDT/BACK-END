@@ -23,6 +23,7 @@ from app.domains.search.router import router as search_router
 from app.domains.fortune.router import router as fortune_router
 from app.domains.auth.router import router as auth_router 
 from app.domains.my_page.router import router as my_page_router
+from app.domains.notification.router import router as notification_router
 
 # jwt 토큰 검증 테스트
 from app.domains.auth.jwt_handler import verify_token
@@ -100,6 +101,7 @@ app.include_router(dictionary_router, prefix="/api/dictionary", tags=["Dictionar
 app.include_router(search_router, prefix="/api/search", tags=["RAG Search"], dependencies=[Depends(verify_token)])
 app.include_router(fortune_router, prefix="/api/fortune", tags=["Fortune"], dependencies=[Depends(verify_token)])
 app.include_router(my_page_router, prefix="/api/my_page", tags=["My_Page"], dependencies=[Depends(verify_token)])
+app.include_router(notification_router, prefix="/api/notifications", tags=["Notifications"], dependencies=[Depends(verify_token)])
 
 
 @app.get("/")
