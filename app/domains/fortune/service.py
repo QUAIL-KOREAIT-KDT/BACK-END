@@ -16,8 +16,8 @@ class FortuneService:
             genai.configure(api_key=settings.GEMINI_API_KEY)
             
             # 무료 티어에서 가장 빠르고 효율적인 모델 선택
-            self.model = genai.GenerativeModel('models/gemini-2.5-flash')
-            logger.info("Gemini API 설정 완료 (models/gemini-2.5-flash)")
+            self.model = genai.GenerativeModel('models/gemini-2.5-flash-lite')
+            # logger.info("Gemini API 설정 완료 (models/gemini-2.5-flash)")
         except Exception as e:
             # API 키가 없거나 설정 실패 시 로그 출력
             logger.error(f"Gemini 초기화 실패: {str(e)}")
@@ -27,7 +27,7 @@ class FortuneService:
         사용자 질문 수신 시 곰팡이 테마의 가족 페르소나로 답변 생성
         """
         if user_question:
-            logger.info(f"질문 수신: {user_question}")
+            # logger.info(f"질문 수신: {user_question}")
             system_instruction = (
                 "당신은 '팡이'입니다. 모든 답변은 '곰팡이' 혹은 '주거 쾌적함'과 연결되어야 합니다. "
                 "말투는 겉으로 무심하고 틱틱거리는 듯하나, 사실은 누구보다 질문자를 걱정하고 챙겨주는 "
@@ -36,7 +36,7 @@ class FortuneService:
             )
             prompt = f"{system_instruction}\n\n사용자 고민: {user_question}"
         else:
-            logger.info("질문 없음: 기본 운세 모드")
+            # logger.info("질문 없음: 기본 운세 모드")
             prompt = "주거 환경의 곰팡이와 쾌적함을 테마로 한 오늘의 운세를 작성하세요."
 
         final_prompt = (
@@ -46,7 +46,7 @@ class FortuneService:
         )
 
         try:
-            logger.info("Gemini API 호출 시도 중...")
+            # logger.info("Gemini API 호출 시도 중...")
             # JSON 응답 강제 설정 (라이브러리 0.7.2+ 필요)
             response = self.model.generate_content(
                 final_prompt,
@@ -54,7 +54,7 @@ class FortuneService:
             )
             
             result = json.loads(response.text)
-            logger.info("Gemini 응답 성공")
+            # logger.info("Gemini 응답 성공")
             return result
 
         except Exception as e:

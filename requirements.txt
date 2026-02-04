@@ -1,40 +1,42 @@
 # ==========================================
-# QUAIL Project Dependency List
-# Environment: Local & EC2 t3a.medium (Ubuntu)
-# Python: 3.10+ (Recommended)
+# QUAIL Project Optimized Requirements
+# Target: AWS EC2 t3a.medium (CPU Only)
 # ==========================================
 
-# [1] Backend Core & API
+# [0] Critical: CPU-only PyTorch (가장 먼저 읽혀야 함)
+# GPU 관련 라이브러리(CUDA)를 제외하여 용량과 메모리를 획기적으로 줄입니다.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+
+# [1] Backend Core
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 pydantic-settings>=2.0.0
 python-multipart>=0.0.6
 requests>=2.31.0
-httpx>=0.24.0           
-apscheduler       
+httpx>=0.24.0
+apscheduler
 
-# [2] Database (Async MySQL)
+# [2] Database
 sqlalchemy>=2.0.0
 aiomysql>=0.2.0
 cryptography
 
-# [3] Auth & Security (JWT)
+# [3] Auth
 python-jose[cryptography]
 passlib[bcrypt]
 
-# [4] AWS Cloud (S3 Image Upload)
+# [4] AWS
 boto3>=1.28.0
 
-# [5] AI - Computer Vision (YOLO)
+# [5] AI - Computer Vision
+# ultralytics가 torch를 다시 설치하지 않도록 위에서 torch를 먼저 명시했습니다.
 ultralytics>=8.0.0
-opencv-python-headless
+opencv-python-headless>=4.8.0
 pillow>=10.0.0
 
-# [6] AI - RAG & Search (gemini-api, Vector DB)
+# [6] AI - RAG & Search
 google-generativeai>=0.7.2
 chromadb>=0.4.0
 tiktoken
-# sentence-transformers
-
-# [7] Notification (FCM Push)
-firebase-admin>=6.2.0   
