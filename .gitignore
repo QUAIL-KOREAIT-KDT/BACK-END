@@ -23,3 +23,4 @@ logs/
 
 # FCM 서비스 계정 키 파일
 pangpangpang-6c609-firebase-adminsdk-fbsvc-fe6a9760ba.json
+firebase-admin-key.json
