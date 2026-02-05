@@ -88,6 +88,14 @@ class NotificationRepository:
             return True
         return False
 
+    async def delete_all_notifications(self, db: AsyncSession, user_id: int) -> int:
+        """사용자의 모든 알림 삭제"""
+        result = await db.execute(
+            delete(Notification).where(Notification.user_id == user_id)
+        )
+        await db.commit()
+        return result.rowcount
+
     async def delete_old_notifications(self, db: AsyncSession, days: int = 30) -> int:
         """오래된 알림 삭제 (30일 이전)"""
         cutoff_date = datetime.now() - timedelta(days=days)

@@ -105,6 +105,16 @@ async def mark_all_notifications_as_read(
     return {"status": "success", "marked_count": count}
 
 
+@router.delete("/delete-all")
+async def delete_all_notifications(
+    user_id: int = Depends(verify_token),
+    db: AsyncSession = Depends(get_db)
+):
+    """모든 알림 삭제"""
+    count = await notification_repository.delete_all_notifications(db, user_id)
+    return {"status": "success", "deleted_count": count}
+
+
 @router.delete("/{notification_id}")
 async def delete_notification(
     notification_id: int,
