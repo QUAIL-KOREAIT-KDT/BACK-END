@@ -31,8 +31,6 @@ passlib[bcrypt]
 boto3>=1.28.0
 
 # [5] AI - Computer Vision
-# ultralytics가 torch를 다시 설치하지 않도록 위에서 torch를 먼저 명시했습니다.
-ultralytics>=8.0.0
 opencv-python-headless>=4.8.0
 pillow>=10.0.0
 

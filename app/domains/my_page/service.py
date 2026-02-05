@@ -13,7 +13,9 @@ class MyPageService:
                 {
                 "id": record.id,
                 "image_path": record.image_path,
-                "created_at": record.created_at
+                "created_at": record.created_at,
+                "result": record.result,
+                "mold_location": record.mold_location
                 } for record in records]
 
 

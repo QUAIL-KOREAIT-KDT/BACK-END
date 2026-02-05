@@ -21,4 +21,6 @@ class Thumbnail(BaseModel):
     id: int
     image_path: str
     created_at: datetime
+    result: str = ''
+    mold_location: str = ''
 

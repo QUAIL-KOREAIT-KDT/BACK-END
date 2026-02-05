@@ -30,9 +30,14 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     print("✅ [Database] 테이블 체크 및 생성 완료")
 
-    # 2. AI 모델 로드 (기존 코드 유지)
-    print("🚀 [System] YOLO AI 모델 및 Vector DB 로드 중...")
-    ml_models["yolo"] = "DUMMY_YOLO_OBJECT" 
+    # 2. AI 모델 로드
+    print("🚀 [System] EfficientNet-B0 모델 및 Vector DB 로드 중...")
+    from app.domains.diagnosis.ai_engine import EfficientNetEngine
+    import os
+    _weights_path = os.path.join(os.path.dirname(__file__), "..", "domains", "diagnosis", "models", "efficientnet_b0_mold.pth")
+    _weights_path = os.path.abspath(_weights_path)
+    print(f"📂 [Model] 가중치 경로: {_weights_path} (존재: {os.path.exists(_weights_path)})")
+    ml_models["efficientnet"] = EfficientNetEngine(weights_path=_weights_path)
     
 
     # [시작 시 실행]
