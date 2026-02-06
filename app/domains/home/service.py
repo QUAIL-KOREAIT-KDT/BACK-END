@@ -28,15 +28,17 @@ class WeatherService:
         # 2. 데이터 최신화 (DB에 없으면 API 호출)
         await self._ensure_weather_data(nx, ny)
 
-        # 3. 조회 시간 설정 (현재 ~ 내일 밤)
+        # 3. 조회 시간 설정 (다음 정시 ~ 내일 밤)
         now = datetime.now()
+        # 현재 시간의 다음 정시를 기준으로 조회 (예: 09:30 → 10:00 데이터부터)
+        next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         tomorrow_end = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
 
-        # 4. DB 조회
+        # 4. DB 조회 (다음 정시 이후 데이터)
         query = select(Weather).where(
             Weather.nx == nx,
             Weather.ny == ny,
-            Weather.date >= now,
+            Weather.date >= next_hour,
             Weather.date <= tomorrow_end
         ).order_by(Weather.date.asc())
         

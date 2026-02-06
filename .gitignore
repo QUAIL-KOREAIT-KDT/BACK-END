@@ -1,26 +1,60 @@
 # .gitignore
-# gitginore로 최대한 업로드하는 불필요한 파일을 제외합시다!
+# gitignore로 최대한 업로드하는 불필요한 파일을 제외합시다!
+
 # 1. 파이썬 필수 무시 항목 (모든 폴더 적용)
 __pycache__/
 *.py[cod]
 *$py.class
-# *.txt
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.Python
 
 # 2. 가상환경 및 환경변수 (보안 필수)
 venv/
+env/
+ENV/
+.venv/
 .env
 .env.local
+.env.*.local
 
 # 3. 프로젝트 데이터 및 임시 파일
 db_data/
 .DS_Store
 chroma_db/
 logs/
+*.log
+*.sqlite3
+*.db
 
 # 4. IDE 설정 파일 (VSCode, Pycharm 등)
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# FCM 서비스 계정 키 파일
+# 5. 테스트 및 커버리지
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# 6. pip 관련
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 7. FCM 서비스 계정 키 파일 (보안 중요!)
 pangpangpang-6c609-firebase-adminsdk-fbsvc-fe6a9760ba.json
 firebase-admin-key.json
+*-firebase-adminsdk-*.json
+
+# 8. 기타 민감 정보
+*.key
+*.pem
+*.crt
+secrets.py
