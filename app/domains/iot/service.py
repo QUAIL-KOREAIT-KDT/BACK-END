@@ -1,0 +1,129 @@
+# BACK-END/app/domains/iot/service.py
+
+from tuya_connector import TuyaOpenAPI
+from app.core.config import settings
+from app.domains.iot.schemas import IotDeviceResponse
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Tuya 기기 카테고리 → 앱 타입 매핑
+DEVICE_TYPE_MAP = {
+    "cz": "plug",           # 스마트 플러그
+    "pc": "plug",           # 멀티탭
+    "kg": "plug",           # 스위치
+    "cs": "dehumidifier",   # 제습기
+    "kt": "air_conditioner",# 에어컨
+    "fs": "fan",            # 선풍기
+}
+
+
+class IotService:
+    def __init__(self):
+        self._api: TuyaOpenAPI | None = None
+        self._initialized = False
+
+    def _ensure_initialized(self):
+        """Tuya API 클라이언트 Lazy 초기화"""
+        if self._initialized:
+            return
+
+        if not all([settings.TUYA_ACCESS_ID, settings.TUYA_ACCESS_SECRET]):
+            raise RuntimeError("Tuya API 자격 증명이 설정되지 않았습니다.")
+
+        self._api = TuyaOpenAPI(
+            settings.TUYA_BASE_URL,
+            settings.TUYA_ACCESS_ID,
+            settings.TUYA_ACCESS_SECRET,
+        )
+        response = self._api.connect()
+        if not response.get("success", False):
+            logger.error(f"Tuya API 연결 실패: {response}")
+            raise RuntimeError("Tuya API 연결에 실패했습니다.")
+
+        self._initialized = True
+        logger.info("Tuya API 연결 성공")
+
+    def is_master_user(self, user_id: int) -> bool:
+        """마스터 유저(개발자) 여부 확인"""
+        return (
+            settings.IOT_MASTER_USER_ID is not None
+            and user_id == settings.IOT_MASTER_USER_ID
+        )
+
+    async def get_devices(self) -> list[IotDeviceResponse]:
+        """마스터 Tuya 계정에 등록된 기기 목록 조회"""
+        self._ensure_initialized()
+
+        response = self._api.get(f"/v1.0/users/{settings.TUYA_UID}/devices")
+
+        if not response.get("success", False):
+            logger.error(f"기기 목록 조회 실패: {response}")
+            raise RuntimeError(
+                response.get("msg", "기기 목록을 가져올 수 없습니다.")
+            )
+
+        devices = []
+        for device_data in response.get("result", []):
+            device_id = device_data.get("id", "")
+            category = device_data.get("category", "")
+
+            # 기기 ON/OFF 상태 조회
+            is_on = False
+            try:
+                status_response = self._api.get(
+                    f"/v1.0/devices/{device_id}/status"
+                )
+                if status_response.get("success"):
+                    for status_item in status_response.get("result", []):
+                        if status_item.get("code") in (
+                            "switch_1", "switch", "switch_led"
+                        ):
+                            is_on = bool(status_item.get("value", False))
+                            break
+            except Exception as e:
+                logger.warning(f"기기 {device_id} 상태 조회 실패: {e}")
+
+            device_type = DEVICE_TYPE_MAP.get(category, "plug")
+
+            devices.append(IotDeviceResponse(
+                id=device_id,
+                name=device_data.get("name", "알 수 없는 기기"),
+                type=device_type,
+                product_name=device_data.get("product_name"),
+                is_online=device_data.get("online", False),
+                is_on=is_on,
+                icon=None,
+            ))
+
+        return devices
+
+    async def control_device(self, device_id: str, turn_on: bool) -> bool:
+        """기기 ON/OFF 제어"""
+        self._ensure_initialized()
+
+        commands = {
+            "commands": [
+                {"code": "switch_1", "value": turn_on}
+            ]
+        }
+
+        response = self._api.post(
+            f"/v1.0/devices/{device_id}/commands",
+            commands,
+        )
+
+        if not response.get("success", False):
+            logger.error(f"기기 제어 실패 ({device_id}): {response}")
+            raise RuntimeError(
+                response.get("msg", "기기 제어에 실패했습니다.")
+            )
+
+        logger.info(
+            f"기기 제어 성공: {device_id} -> {'ON' if turn_on else 'OFF'}"
+        )
+        return True
+
+
+# 싱글톤 인스턴스
+iot_service = IotService()

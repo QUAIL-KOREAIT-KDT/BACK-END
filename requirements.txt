@@ -41,3 +41,6 @@ tiktoken
 
 # notification
 firebase-admin>=6.0.0
+
+# [7] IoT - Tuya Cloud
+tuya-connector-python>=0.1.2

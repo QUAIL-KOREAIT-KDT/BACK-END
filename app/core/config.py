@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     # Firebase 설정 (FCM 푸시 알림용)
     FIREBASE_CREDENTIALS_PATH: str | None = None
 
+    # Tuya IoT 설정
+    TUYA_ACCESS_ID: str | None = None
+    TUYA_ACCESS_SECRET: str | None = None
+    TUYA_UID: str | None = None
+    TUYA_BASE_URL: str = "https://openapi.tuyaus.com"
+
+    # IoT 마스터 유저 (개발자 계정)
+    IOT_MASTER_USER_ID: int | None = None
+
     class Config:
         # .env 파일을 읽어서 위 변수들에 자동으로 값을 채워줍니다.
         env_file = ".env"
