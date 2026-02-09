@@ -58,3 +58,7 @@ firebase-admin-key.json
 *.pem
 *.crt
 secrets.py
+
+# 9. pth
+*pth
+efficientnet_b0_mold_quantized.onnx

@@ -3,12 +3,6 @@
 # Target: AWS EC2 t3a.medium (CPU Only)
 # ==========================================
 
-# [0] Critical: CPU-only PyTorch (가장 먼저 읽혀야 함)
-# GPU 관련 라이브러리(CUDA)를 제외하여 용량과 메모리를 획기적으로 줄입니다.
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
-torchvision
-
 # [1] Backend Core
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
@@ -30,9 +24,11 @@ passlib[bcrypt]
 # [4] AWS
 boto3>=1.28.0
 
-# [5] AI - Computer Vision
+# [5] AI - Computer Vision (ONNX Runtime 기반 추론)
+onnxruntime>=1.16.0
 opencv-python-headless>=4.8.0
 pillow>=10.0.0
+numpy>=1.24.0
 
 # [6] AI - RAG & Search
 google-generativeai>=0.7.2

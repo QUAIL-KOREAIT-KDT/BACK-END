@@ -1,8 +1,7 @@
 # BACK-END/app/domains/diagnosis/ai_engine.py
 
-import torch
-import torchvision.transforms as transforms
-import torchvision.models as models
+import numpy as np
+import onnxruntime as ort
 from PIL import Image
 
 # 학습된 모델의 출력 클래스 라벨 (4개 분류)
@@ -14,41 +13,40 @@ MOLD_CLASSES = [
     "G4_Serratia"           # G4 주황/분홍곰팡이
 ]
 
+# ImageNet 정규화 상수
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
+
 class EfficientNetEngine:
     def __init__(self, weights_path: str | None = None):
-        self.device = torch.device("cpu")  # t3a.medium = CPU Only
-        self.model = self._load_model(weights_path)
-        self.model.eval()  # 추론 모드로 설정
-        self.transform = self._get_transform()
+        sess_options = ort.SessionOptions()
+        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        sess_options.intra_op_num_threads = 2  # t3a.medium 2 vCPU
 
-    def _load_model(self, weights_path: str | None):
-        model = models.efficientnet_b0(weights=None)
-        # 마지막 FC 레이어를 4개 분류 클래스로 교체
-        model.classifier[1] = torch.nn.Linear(
-            model.classifier[1].in_features,
-            len(MOLD_CLASSES)  # 4
+        self.session = ort.InferenceSession(
+            weights_path,
+            sess_options,
+            providers=["CPUExecutionProvider"]
         )
-        # fine-tuning된 학습 가중치 로드
-        if weights_path:
-            state_dict = torch.load(weights_path, map_location=self.device)
-            model.load_state_dict(state_dict)
-        return model.to(self.device)
+        self.input_name = self.session.get_inputs()[0].name
 
-    def _get_transform(self):
-        # EfficientNet-B0 공식 입력 크기: 224x224, ImageNet 정규화
-        return transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],  # ImageNet mean
-                std=[0.229, 0.224, 0.225]    # ImageNet std
-            )
-        ])
-
-    def preprocess(self, image_file) -> torch.Tensor:
-        """SpooledTemporaryFile → 정규화된 텐서 변환"""
+    def preprocess(self, image_file) -> np.ndarray:
+        """SpooledTemporaryFile/BytesIO → 정규화된 numpy 배열 변환"""
         image = Image.open(image_file).convert("RGB")
-        return self.transform(image).unsqueeze(0).to(self.device)  # batch dim 추가
+        image = image.resize((224, 224), Image.BILINEAR)
+
+        # PIL Image → float32 배열 (0~1 범위)
+        img_array = np.array(image, dtype=np.float32) / 255.0
+
+        # ImageNet 정규화
+        img_array = (img_array - IMAGENET_MEAN) / IMAGENET_STD
+
+        # HWC → CHW → NCHW (배치 차원 추가)
+        img_array = img_array.transpose(2, 0, 1)
+        img_array = np.expand_dims(img_array, axis=0)
+
+        return img_array
 
     def predict(self, image_file) -> dict:
         """
@@ -56,13 +54,20 @@ class EfficientNetEngine:
         반환: {"class_name": str, "confidence": float}
         임계치 체크, G3 특별 처리 등의 비즈니스 로직은 service.py에서 처리
         """
-        input_tensor = self.preprocess(image_file)
-        with torch.no_grad():
-            logits = self.model(input_tensor)
-            probabilities = torch.softmax(logits, dim=1)
-            confidence, predicted_idx = torch.max(probabilities, dim=1)
+        input_data = self.preprocess(image_file)
+
+        # ONNX Runtime 추론
+        outputs = self.session.run(None, {self.input_name: input_data})
+        logits = outputs[0][0]  # shape: (4,)
+
+        # softmax
+        exp_logits = np.exp(logits - np.max(logits))
+        probabilities = exp_logits / exp_logits.sum()
+
+        predicted_idx = int(np.argmax(probabilities))
+        confidence = float(probabilities[predicted_idx])
 
         return {
-            "class_name": MOLD_CLASSES[predicted_idx.item()],
-            "confidence": round(confidence.item() * 100, 1)  # 퍼센트로 변환
+            "class_name": MOLD_CLASSES[predicted_idx],
+            "confidence": round(confidence * 100, 1)  # 퍼센트로 변환
         }
