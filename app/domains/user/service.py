@@ -82,7 +82,9 @@ class UserService:
         if not user:
             user = await self.repo.create_user(db, kakao_id)
             is_new_user = True  # 신규 유저라고 표시!
-        
+
+        elif user and user.nickname is None:
+            is_new_user = True
         # 3. 유저 객체와 신규 여부를 같이 반환
         return user, is_new_user
     

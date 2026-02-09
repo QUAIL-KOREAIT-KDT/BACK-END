@@ -12,7 +12,6 @@ from app.domains.auth.schemas import KakaoLoginRequest, AuthResponse
 
 router = APIRouter()
 
-# [수정] AuthService 대신 UserService와 KakaoClient를 사용합니다.
 user_service = UserService() 
 kakao_client = KakaoClient() 
 
