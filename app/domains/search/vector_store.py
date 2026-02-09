@@ -19,7 +19,7 @@ class VectorStore:
         try:
             # [수정] 최신 임베딩 모델 사용 ('models/' 접두사 필수)
             result = genai.embed_content(
-                model="models/text-embedding-004",
+                model="models/embedding-001",
                 content=text,
                 task_type="retrieval_document",
                 title="Mold Dictionary"
