@@ -10,6 +10,10 @@ from app.domains.home.schemas import WeatherDetail, VentilationTime, HomeRespons
 from app.domains.home.utils import calculate_predicted_mold_risk
 
 class WeatherService:
+    # 좌표별 마지막 API 호출에 사용된 base_time을 캐싱
+    # key: (nx, ny), value: "YYYYMMDDHHMM" 형태의 base_time 문자열
+    _last_fetched_base: dict[tuple[int, int], str] = {}
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self.client = WeatherClient()
@@ -106,29 +110,32 @@ class WeatherService:
     async def _ensure_weather_data(self, nx: int, ny: int):
         """
         DB에 현재 시간 이후의 데이터가 있는지 확인하고, 없으면 API를 호출하여 저장합니다.
+        기상청 발표 주기(3시간)에 맞춰 최신 데이터를 유지합니다.
         """
         now = datetime.now()
-        
-        # 1. DB 캐시 확인 (1시간 뒤의 데이터가 있는지)
-        check_time = now + timedelta(hours=1)
-        query = select(Weather).where(
-            Weather.nx == nx,
-            Weather.ny == ny,
-            Weather.date >= check_time
-        ).limit(1)
-        
-        result = await self.db.execute(query)
-        exists = result.scalars().first()
 
-        if exists:
-            return 
+        # 1. 현재 기상청 최신 base_time 계산 (02, 05, 08, 11, 14, 17, 20, 23시)
+        if now.hour < 2:
+            base_date = (now - timedelta(days=1)).strftime("%Y%m%d")
+            base_time = "2300"
+        else:
+            base_h = ((now.hour - 2) // 3) * 3 + 2
+            base_date = now.strftime("%Y%m%d")
+            base_time = f"{base_h:02d}00"
 
-        # 2. 데이터가 없으므로 API 호출
+        current_base_key = f"{base_date}{base_time}"
+        grid_key = (nx, ny)
+
+        # 2. 이미 이 base_time으로 데이터를 가져왔으면 스킵
+        if WeatherService._last_fetched_base.get(grid_key) == current_base_key:
+            return
+
+        # 3. 캐시 만료 → API 호출
         items = await self.client.fetch_forecast(nx, ny)
         if not items:
             return
 
-        # 3. 데이터 가공
+        # 4. 데이터 가공
         grouped_data = {}
         for item in items:
             category = item['category']
@@ -157,11 +164,10 @@ class WeatherService:
                     humid=values['REH'],
                     rain_prob=int(values['POP']),
                     dew_point=None,
-                    mold_index=None
                 )
                 new_weather_objects.append(weather)
 
-        # 4. DB 저장 (Safe Update)
+        # 5. DB 저장 (Safe Update)
         if new_weather_objects:
             try:
                 # [수정된 부분] 새로 받아온 데이터 중 가장 이른 시간부터 삭제
@@ -177,8 +183,10 @@ class WeatherService:
                 
                 self.db.add_all(new_weather_objects)
                 await self.db.commit()
-                print(f"✅ 날씨 데이터 {len(new_weather_objects)}개 갱신 완료 (기준: {min_date} 이후)")
-                
+                # 저장 성공 시 캐시 키 기록
+                WeatherService._last_fetched_base[grid_key] = current_base_key
+                print(f"✅ 날씨 데이터 {len(new_weather_objects)}개 갱신 완료 (base: {current_base_key})")
+
             except Exception as e:
                 await self.db.rollback()
                 print(f"❌ DB 저장 실패: {e}")
