@@ -61,11 +61,11 @@ class DiagnosisService:
             file_ext=file_ext
         )
 
-        # 4. CAM 이미지 생성 + S3 업로드 (G5 제외)
+        # 4. CAM 이미지 생성 + S3 업로드 (G0, UNCLASSIFIED 제외)
         gradcam_url = None
         bbox_json_str = None
 
-        if storage_label != "G0" and bbox is not None:
+        if storage_label not in ("G0", "UNCLASSIFIED") and bbox is not None:
             # CAM 바운딩박스 이미지 생성
             cam_image_bytes = draw_bbox_on_image(file_bytes, bbox)
 
@@ -114,8 +114,25 @@ class DiagnosisService:
                 "prevention": [],
                 "insight": "신뢰도가 낮아 정확한 곰팡이 종류를 판별할 수 없었습니다. 위의 권장 조치를 따라 다시 진단을 시도해주세요."
             }, ensure_ascii=False)
+        elif mold_name == "G0_NotMold":
+            # 7-1. G0 확신: 곰팡이가 아님 (RAG 호출 불필요)
+            final_solution = json.dumps({
+                "diagnosis": "AI 분석 결과, 해당 이미지에서 곰팡이가 감지되지 않았습니다.",
+                "FrequentlyVisitedAreas": [],
+                "solution": [
+                    "현재 촬영하신 부분에는 곰팡이가 발견되지 않았습니다.",
+                    "다른 의심 부위가 있다면 추가 진단을 진행해보세요.",
+                    "곰팡이와 유사한 얼룩이나 오염물일 수 있으니, 지속적으로 관찰해주세요."
+                ],
+                "prevention": [
+                    "실내 습도를 50% 이하로 유지하면 곰팡이 예방에 효과적입니다.",
+                    "환기를 자주 시켜 공기 순환을 유지하세요.",
+                    "결로가 생기기 쉬운 곳은 주기적으로 확인해주세요."
+                ],
+                "insight": "곰팡이가 아닌 것으로 판단되었습니다. 다만 비슷해 보이는 오염물이 시간이 지나며 곰팡이로 발전할 수 있으니 주기적으로 관찰하시길 권장합니다."
+            }, ensure_ascii=False)
         else:
-            # 7. G3 특별 처리: "물 테스트" 안내 추가
+            # 7-2. G3 특별 처리: "물 테스트" 안내 추가
             if mold_name == "G3_WhiteMold":
                 final_solution = await self._handle_g3_white_mold(mold_name, probability)
             else:
@@ -130,7 +147,7 @@ class DiagnosisService:
         diagnosis_data = {
             "user_id": user_id,
             "image_path": image_url,
-            "gradcam_image_path": gradcam_url,        # CAM 이미지 S3 URL (G5는 None)
+            "gradcam_image_path": gradcam_url,        # CAM 이미지 S3 URL (G0는 None)
             "bbox_coordinates": bbox_json_str,         # bbox JSON string
             "result": grade,                           # 등급 접두사 (G1~G4 / UnClassified)
             "confidence": probability,                 # 확률
@@ -146,10 +163,13 @@ class DiagnosisService:
     def _determine_storage_label(self, mold_name: str, confidence: float) -> str:
         """
         S3 저장 폴더 라벨 결정
-        - 모델이 G0 예측 또는 confidence < 60%: G0 (NotMold / UnClassified)
+        - confidence < 60%: UNCLASSIFIED (신뢰도 부족, 판별 불가)
+        - G0_NotMold 예측 (60% 이상): G0 (곰팡이 아님 확신)
         - 나머지: 예측 라벨의 접두사 (G1~G4)
         """
-        if confidence < CONFIDENCE_THRESHOLD or mold_name == "G0_NotMold":
+        if confidence < CONFIDENCE_THRESHOLD:
+            return "UNCLASSIFIED"
+        if mold_name == "G0_NotMold":
             return "G0"
         return mold_name.split("_")[0]  # "G1_Stachybotrys" → "G1"
 

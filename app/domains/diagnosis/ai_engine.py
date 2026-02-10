@@ -4,7 +4,7 @@ import numpy as np
 import onnxruntime as ort
 from PIL import Image
 
-# 학습된 모델의 출력 클래스 라벨 (4개 분류)
+# 학습된 모델의 출력 클래스 라벨 (5개 분류)
 # G3은 흰곰팡이(Mucor 등)와 백화현상(Efflorescence)을 병합
 MOLD_CLASSES = [
     "G0_NotMold",           # G0 곰팡이 아님
