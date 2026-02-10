@@ -5,38 +5,35 @@
 
 import torch
 import torch.nn as nn
-import torchvision.models as models
+import timm
 import onnx
 import onnx.numpy_helper
 import numpy as np
 import os
 
 # ── 경로 설정 ──
-PTH_PATH = os.path.join("app", "domains", "diagnosis", "models", "efficientnet_b0_mold.pth")
+PTH_PATH = os.path.join("app", "domains", "diagnosis", "models", "efficientnet_b0_mold.pt")
 ONNX_PATH = os.path.join("app", "domains", "diagnosis", "models", "efficientnet_b0_mold.onnx")
 NUM_CLASSES = 5
 
 
 class EfficientNetDualOutput(nn.Module):
     """
-    EfficientNet-B0를 감싸서 2개 출력을 반환하는 wrapper
+    timm EfficientNet-B0를 감싸서 2개 출력을 반환하는 wrapper
     - output 1: logits (1, NUM_CLASSES) — 분류 결과
     - output 2: features (1, 1280, 7, 7) — 마지막 conv layer feature map (CAM용)
     """
     def __init__(self, base_model):
         super().__init__()
-        self.features = base_model.features       # Conv layers
-        self.avgpool = base_model.avgpool          # AdaptiveAvgPool2d
-        self.classifier = base_model.classifier    # Dropout + Linear
+        self.base_model = base_model
 
     def forward(self, x):
-        # 마지막 conv layer의 feature map 추출
-        feature_maps = self.features(x)            # (1, 1280, 7, 7)
+        # timm EfficientNet: forward_features()로 feature map 추출
+        feature_maps = self.base_model.forward_features(x)  # (1, 1280, 7, 7)
 
-        # 기존 classifier 경로
-        pooled = self.avgpool(feature_maps)        # (1, 1280, 1, 1)
-        flattened = torch.flatten(pooled, 1)       # (1, 1280)
-        logits = self.classifier(flattened)        # (1, NUM_CLASSES)
+        # global average pooling + classifier
+        pooled = self.base_model.global_pool(feature_maps)  # (1, 1280)
+        logits = self.base_model.classifier(pooled)          # (1, NUM_CLASSES)
 
         return logits, feature_maps
 
@@ -47,11 +44,31 @@ def step1_convert_pth_to_onnx():
     print("[Step 1] PyTorch → Dual-Output ONNX 변환")
     print("=" * 50)
 
-    # 모델 구조 생성 및 가중치 로드
-    base_model = models.efficientnet_b0(weights=None)
-    base_model.classifier[1] = torch.nn.Linear(base_model.classifier[1].in_features, NUM_CLASSES)
-    state_dict = torch.load(PTH_PATH, map_location="cpu")
-    base_model.load_state_dict(state_dict)
+    # 모델 로드 (체크포인트 형식 자동 감지)
+    checkpoint = torch.load(PTH_PATH, map_location="cpu")
+
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        # 체크포인트 형식: {epoch, model_state_dict, optimizer_state_dict, ...}
+        state_dict = checkpoint["model_state_dict"]
+        print(f"  체크포인트 형식 감지 (epoch: {checkpoint.get('epoch')}, val_acc: {checkpoint.get('val_acc')})")
+        print(f"  class_names: {checkpoint.get('class_names')}")
+
+        # 키 접두사 자동 제거 (예: "model.features.0.0.weight" → "features.0.0.weight")
+        first_key = list(state_dict.keys())[0]
+        if first_key.startswith("model."):
+            print(f"  키 접두사 'model.' 감지 → 제거 중...")
+            state_dict = {k.replace("model.", "", 1): v for k, v in state_dict.items()}
+
+        base_model = timm.create_model('efficientnet_b0', pretrained=False, num_classes=NUM_CLASSES)
+        base_model.load_state_dict(state_dict)
+    elif isinstance(checkpoint, dict):
+        # 순수 state_dict 형식
+        base_model = timm.create_model('efficientnet_b0', pretrained=False, num_classes=NUM_CLASSES)
+        base_model.load_state_dict(checkpoint)
+    else:
+        # 모델 전체 저장 형식
+        base_model = checkpoint
+
     base_model.eval()
 
     # Dual-output wrapper로 감싸기
