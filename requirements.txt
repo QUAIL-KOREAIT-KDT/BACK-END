@@ -26,6 +26,7 @@ boto3>=1.28.0
 
 # [5] AI - Computer Vision (ONNX Runtime 기반 추론)
 onnxruntime>=1.16.0
+onnx>=1.14.0
 opencv-python-headless>=4.8.0
 pillow>=10.0.0
 numpy>=1.24.0
