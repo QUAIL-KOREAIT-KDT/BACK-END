@@ -23,6 +23,12 @@ class Diagnosis(Base):
     # 사용자 사진 경로
     image_path = Column(String(255), nullable=False)
 
+    # GradCAM 바운딩박스 이미지 경로 (S3 URL)
+    gradcam_image_path = Column(String(255), nullable=True)
+
+    # 바운딩박스 좌표 (JSON string, 데이터 파이프라인용)
+    bbox_coordinates = Column(Text, nullable=True)
+
     # 곰팡이 위치 => 창문, 벽지, 욕실, 천장, 주방, 음식, 베란다, 에어컨, 거실, 세면대, 변기
     mold_location = Column(Enum("windows", "wallpaper", "bathroom", "ceiling", "kitchen", "food", "veranda", "air_conditioner", "living_room", "sink", "toilet", name='mold_location_types'))
 

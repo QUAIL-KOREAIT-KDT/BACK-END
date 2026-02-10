@@ -15,6 +15,8 @@ class DiagnosisRepository:
             result=diagnosis_data['result'],
             confidence=diagnosis_data['confidence'],
             image_path=diagnosis_data['image_path'],
+            gradcam_image_path=diagnosis_data.get('gradcam_image_path'),
+            bbox_coordinates=diagnosis_data.get('bbox_coordinates'),
             mold_location=diagnosis_data['mold_location'],
             model_solution=diagnosis_data['model_solution']
         )

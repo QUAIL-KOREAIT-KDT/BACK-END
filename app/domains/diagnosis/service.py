@@ -2,12 +2,15 @@
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.storage import StorageClient
+from app.utils.cam_utils import draw_bbox_on_image
 from app.domains.diagnosis.repository import DiagnosisRepository
 from app.core.lifespan import ml_models  # 서버 시작 시 로드된 모델 재사용
 from app.domains.search.service import search_service # [추가] RAG 서비스 임포트
 import logging
 import json
 import io
+import uuid
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -25,21 +28,78 @@ class DiagnosisService:
         file_bytes = await file.read()
         await file.seek(0)  # S3 업로드를 위해 포인터 초기화
 
-        # 1. 이미지 S3 업로드
-        image_url = await self.storage.upload_image(file)
+        # 고유 UUID 생성 (원본, CAM, JSON 파일에 동일 UUID 사용)
+        file_uuid = str(uuid.uuid4())
+        file_ext = file.filename.split(".")[-1] if file.filename else "jpg"
 
-        # 2. AI 모델(EfficientNet-B0) 분류 추론 (메모리의 바이트로 BytesIO 생성하여 전달)
+        # 1. AI 모델(EfficientNet-B0) 분류 추론 + CAM 생성
         try:
-            prediction = self.ai.predict(io.BytesIO(file_bytes))
+            prediction = self.ai.predict_with_cam(io.BytesIO(file_bytes), generate_cam=True)
             mold_name = prediction.get("class_name", "Unknown Mold")
             probability = float(prediction.get("confidence", 0.0))
+            cam_heatmap = prediction.get("cam_heatmap")
+            bbox = prediction.get("bbox")
 
         except Exception as e:
             logger.error(f"EfficientNet 추론 실패: {e}")
             mold_name = "Unknown"
             probability = 0.0
+            cam_heatmap = None
+            bbox = None
 
-        # 3. 임계치 체크: 확률이 낮으면 곰팡이 특정 불가
+        # 2. 저장 라벨 결정 (S3 폴더 분류)
+        storage_label = self._determine_storage_label(mold_name, probability)
+
+        # 3. S3 업로드: 원본 이미지 (라벨 폴더)
+        original_bytes_io = io.BytesIO(file_bytes)
+        image_url = self.storage.upload_to_folder(
+            file_bytes=original_bytes_io,
+            label=storage_label,
+            file_uuid=file_uuid,
+            folder_type="dataset",
+            content_type=file.content_type or "image/jpeg",
+            file_ext=file_ext
+        )
+
+        # 4. CAM 이미지 생성 + S3 업로드 (G5 제외)
+        gradcam_url = None
+        bbox_json_str = None
+
+        if storage_label != "G0" and bbox is not None:
+            # CAM 바운딩박스 이미지 생성
+            cam_image_bytes = draw_bbox_on_image(file_bytes, bbox)
+
+            # S3 업로드: CAM 이미지
+            gradcam_url = self.storage.upload_to_folder(
+                file_bytes=cam_image_bytes,
+                label=storage_label,
+                file_uuid=file_uuid,
+                folder_type="gradcam",
+                content_type="image/jpeg",
+                file_ext="jpg"
+            )
+
+        # 5. JSON sidecar 업로드 (bbox 좌표 + 메타데이터)
+        if bbox is not None:
+            bbox_data = {
+                "image_id": file_uuid,
+                "label": mold_name,
+                "confidence": probability,
+                "bbox": {
+                    "x_min": bbox[0],
+                    "y_min": bbox[1],
+                    "x_max": bbox[2],
+                    "y_max": bbox[3],
+                    "format": "xyxy",
+                    "image_size": [224, 224]
+                },
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "model_version": "efficientnet_b0_v1.0"
+            }
+            self.storage.upload_json(bbox_data, label=storage_label, file_uuid=file_uuid)
+            bbox_json_str = json.dumps(bbox_data, ensure_ascii=False)
+
+        # 6. 임계치 체크: 확률이 낮으면 곰팡이 특정 불가
         if probability < CONFIDENCE_THRESHOLD:
             mold_name = "UnClassified"
             # 프론트 RagSolution.parse와 동일한 JSON 구조로 반환
@@ -55,7 +115,7 @@ class DiagnosisService:
                 "insight": "신뢰도가 낮아 정확한 곰팡이 종류를 판별할 수 없었습니다. 위의 권장 조치를 따라 다시 진단을 시도해주세요."
             }, ensure_ascii=False)
         else:
-            # 4. G3 특별 처리: "물 테스트" 안내 추가
+            # 7. G3 특별 처리: "물 테스트" 안내 추가
             if mold_name == "G3_WhiteMold":
                 final_solution = await self._handle_g3_white_mold(mold_name, probability)
             else:
@@ -63,24 +123,35 @@ class DiagnosisService:
                 rag_result = await search_service.get_mold_solution_with_rag(mold_name, probability)
                 final_solution = rag_result["rag_solution"]
 
-        # 5. DB 저장을 위한 데이터 구성
+        # 8. DB 저장을 위한 데이터 구성
         # result 필드: "G1_Stachybotrys" → "G1" 등 등급 접두사만 저장 (프론트 표시용)
-        # RAG 파이프라인에는 전체 클래스명을 사용하고, DB에는 등급만 저장
         grade = mold_name.split("_")[0]  # "G1_Stachybotrys" → "G1", "UnClassified" → "UnClassified"
 
         diagnosis_data = {
             "user_id": user_id,
             "image_path": image_url,
-            "result": grade,              # 등급 접두사 (G1~G4 / UnClassified)
-            "confidence": probability,    # 확률
-            "mold_location": place,       # 발견 장소 (사용자 입력)
-            "model_solution": final_solution # RAG가 생성한 리포트 저장
+            "gradcam_image_path": gradcam_url,        # CAM 이미지 S3 URL (G5는 None)
+            "bbox_coordinates": bbox_json_str,         # bbox JSON string
+            "result": grade,                           # 등급 접두사 (G1~G4 / UnClassified)
+            "confidence": probability,                 # 확률
+            "mold_location": place,                    # 발견 장소 (사용자 입력)
+            "model_solution": final_solution           # RAG가 생성한 리포트 저장
         }
 
-        # 6. DB 저장
+        # 9. DB 저장
         saved_diagnosis = await self.repository.create_diagnosis(diagnosis_data)
 
         return saved_diagnosis
+
+    def _determine_storage_label(self, mold_name: str, confidence: float) -> str:
+        """
+        S3 저장 폴더 라벨 결정
+        - 모델이 G0 예측 또는 confidence < 60%: G0 (NotMold / UnClassified)
+        - 나머지: 예측 라벨의 접두사 (G1~G4)
+        """
+        if confidence < CONFIDENCE_THRESHOLD or mold_name == "G0_NotMold":
+            return "G0"
+        return mold_name.split("_")[0]  # "G1_Stachybotrys" → "G1"
 
     async def _handle_g3_white_mold(self, mold_name: str, probability: float) -> str:
         """
