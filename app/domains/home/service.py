@@ -1,226 +1,215 @@
 # BACK-END/app/domains/home/service.py
 
 from datetime import datetime, timedelta
-from sqlalchemy import select, delete
+import pytz
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.domains.user.repository import UserRepository
 from app.domains.home.models import Weather
-from app.domains.user.models import User
-from app.domains.home.client import WeatherClient
-from app.domains.home.schemas import WeatherDetail, VentilationTime, HomeResponse, RiskInfo
-from app.domains.home.utils import calculate_predicted_mold_risk
+from app.domains.home.utils import calculate_mold_risk
+from app.domains.home.schemas import (
+    HomeResponse, WeatherDetail, VentilationTime, MoldRiskItem
+)
 
-class WeatherService:
-    # 좌표별 마지막 API 호출에 사용된 base_time을 캐싱
-    # key: (nx, ny), value: "YYYYMMDDHHMM" 형태의 base_time 문자열
-    _last_fetched_base: dict[tuple[int, int], str] = {}
+class HomeService:
+    def __init__(self):
+        self.user_repo = UserRepository()
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
-        self.client = WeatherClient()
+    async def get_home_view(self, user_id: int, db: AsyncSession) -> HomeResponse:
+        """
+        메인 홈 화면 데이터 조회
+        1. 곰팡이 위험도: 오늘 하루치 중 [최대, 최소, 현재(+1h)] 3개 반환
+        2. 날씨 정보: 현재 시간 + 1시간 (Target Time) 데이터 1개만 반환
+        3. 환기 정보: 오늘 하루치 중 '가장 좋고 긴 시간' 1개만 반환
+        """
+        # 1. 사용자 정보 조회
+        user = await self.user_repo.get_user_by_id(db, user_id)
+        if not user:
+            return self._get_empty_response()
 
-    async def get_home_info(self, user_id: int) -> HomeResponse:
-        # 1. 사용자 정보 및 좌표 확인
-        user = await self._get_user(user_id)
-        if not user or not user.grid_nx or not user.grid_ny:
-            # 좌표 없으면 기본값 (서울 종로구)
-            nx, ny = 60, 127
-            address = "서울특별시 종로구 (기본설정)"
-        else:
-            nx, ny = user.grid_nx, user.grid_ny
-            address = user.region_address or "알 수 없는 지역"
+        direction = user.window_direction or "S"
+        floor_type = user.underground or "others"
+        address = user.region_address or "주소 미설정"
+        nx = user.grid_nx or 60 
+        ny = user.grid_ny or 127
 
-        # 2. 데이터 최신화 (DB에 없으면 API 호출)
-        await self._ensure_weather_data(nx, ny)
+        # 2. 시간 설정 (KST 강제 적용)
+        kst = pytz.timezone('Asia/Seoul')
+        now = datetime.now(kst)
+        # [Target Time] 현재 시간 + 1시간 (분/초 0으로 초기화)
+        target_time = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        
+        # 오늘 하루 전체 범위 (00:00 ~ 23:59)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59)
 
-        # 3. 조회 시간 설정 (다음 정시 ~ 내일 밤)
-        now = datetime.now()
-        # 현재 시간의 다음 정시를 기준으로 조회 (예: 09:30 → 10:00 데이터부터)
-        next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-        tomorrow_end = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
-
-        # 4. DB 조회 (다음 정시 이후 데이터)
-        query = select(Weather).where(
+        # 3. 데이터 조회 (오늘 전체 데이터 한 번에 조회)
+        daily_query = select(Weather).where(
             Weather.nx == nx,
             Weather.ny == ny,
-            Weather.date >= next_hour,
-            Weather.date <= tomorrow_end
+            Weather.date >= today_start,
+            Weather.date <= today_end
         ).order_by(Weather.date.asc())
+        daily_result = await db.execute(daily_query)
+        daily_weather_list = daily_result.scalars().all()
+
+        if not daily_weather_list:
+            return self._get_empty_response(address)
+
+        # Target Time에 해당하는 날씨 데이터 찾기
+        target_weather = next((w for w in daily_weather_list if w.date == target_time), None)
+
+
+        # 4. 곰팡이 위험도 계산 (Max, Min, Current)
+        daily_max_item = None
+        daily_min_item = None
+        current_target_item = None
+        last_item = None # 예보가 끊겼을 때를 대비한 마지막 아이템
+
+        # 사용자 실내 데이터
+        t_in = user.indoor_temp
+        h_in = user.indoor_humidity
+
+        for w in daily_weather_list:
+            # 윈도우 호환성: f-string 사용
+            time_str = f"{w.date.hour:02d}:00"
+            
+            # 위험도 계산
+            risk_res = calculate_mold_risk(
+                t_out=w.temp,
+                rh_out=w.humid,
+                direction=direction,
+                floor_type=floor_type,
+                t_in_real=t_in,
+                rh_in_real=h_in
+            )
+
+            # 아이템 생성
+            item = MoldRiskItem(
+                time=time_str,
+                score=risk_res.get("score", 0.0),
+                level=risk_res.get("level", "SAFE"),
+                status=risk_res.get("status", "안전"),
+                type="NORMAL",
+                message=risk_res.get("message", ""),
+                temp_used=risk_res["details"].get("t_in", 0.0),
+                humid_used=risk_res["details"].get("h_in", 0.0)
+            )
+
+            # Max/Min 갱신
+            if daily_max_item is None or item.score > daily_max_item.score:
+                daily_max_item = item
+            
+            if daily_min_item is None or item.score < daily_min_item.score:
+                daily_min_item = item
+
+            # Current (Target Time) 찾기
+            if w.date == target_time:
+                current_target_item = item
+            
+            last_item = item
+
+        # 최종 리스트 조립 (MAX, MIN, CURRENT)
+        final_risk_list = []
         
-        result = await self.db.execute(query)
-        weather_list = result.scalars().all()
+        if daily_max_item:
+            m = daily_max_item.model_copy()
+            m.type = "MAX"
+            m.message = f"오늘 최대 위험 ({m.time})"
+            final_risk_list.append(m)
+            
+        if daily_min_item:
+            m = daily_min_item.model_copy()
+            m.type = "MIN"
+            m.message = f"오늘 최소 위험 ({m.time})"
+            final_risk_list.append(m)
+            
+        if current_target_item:
+            m = current_target_item.model_copy()
+            m.type = "CURRENT"
+            final_risk_list.append(m)
+        elif last_item:
+            # Target Time 데이터가 없으면 마지막 데이터 사용
+            m = last_item.model_copy()
+            m.type = "CURRENT"
+            m.message = "금일 예보 종료"
+            final_risk_list.append(m)
 
-        current_weather_obj = None
-        if weather_list:
-             # 리스트는 시간순 정렬되어 있으므로 첫 번째가 현재와 가장 가까움
-             current_weather_obj = weather_list[0]
 
-        # 5. [응답 1] 오늘 날씨 리스트 구성
-        today_forecast = []
-        today_str = now.strftime("%Y-%m-%d")
-        
-        for w in weather_list:
-            if w.date.strftime("%Y-%m-%d") == today_str:
-                cond = "쾌적"
-                if w.humid > 70: cond = "습함"
-                elif w.rain_prob > 50: cond = "비 올 확률 높음"
+        # 5. 날씨 정보 (Target Time 기준 1개만)
+        weather_details = []
+        if target_weather:
+            cond = "쾌적"
+            if target_weather.humid > 70: cond = "습함"
+            elif target_weather.rain_prob > 0: cond = "비"
+            
+            weather_details.append(WeatherDetail(
+                time=f"{target_weather.date.hour:02d}:00",
+                temp=target_weather.temp,
+                humid=target_weather.humid,
+                rain_prob=target_weather.rain_prob,
+                condition=cond
+            ))
 
-                today_forecast.append(WeatherDetail(
-                    time=w.date.strftime("%H:%M"),
-                    temp=w.temp,
-                    humid=w.humid,
-                    rain_prob=w.rain_prob,
-                    condition=cond
-                ))
-
-        # 6. [응답 2] 환기 추천 알고리즘
-        ventilation_recs = self._calculate_ventilation_times(weather_list)
-
-        # 7. [응답 3] 실시간 곰팡이 위험도 계산 (NEW)
-        risk_data = None
-        if current_weather_obj and user.window_direction:
-             # utils.py의 하이브리드 엔진 직접 호출
-             calc_res = calculate_predicted_mold_risk(
-                t_out=current_weather_obj.temp,
-                rh_out=current_weather_obj.humid,
-                direction=user.window_direction,
-                floor_type=user.underground,
-                t_in_real=user.indoor_temp,
-                rh_in_real=user.indoor_humidity
-             )
-             
-             risk_data = RiskInfo(
-                 score=calc_res['score'],
-                 level=calc_res['status'],
-                 message=calc_res['message'],
-                 details=calc_res.get('details') # 시뮬레이션 상세 수치 포함
-             )
+        # 6. 환기 정보 (최적의 시간 1개만 선정)
+        ventilation_recs = self._calculate_best_ventilation(daily_weather_list)
 
         return HomeResponse(
             region_address=address,
-            current_weather=today_forecast,
+            current_weather=weather_details, 
             ventilation_times=ventilation_recs,
-            risk_info=risk_data  # 추가된 필드 반환
+            risk_forecast=final_risk_list
         )
 
-    async def _get_user(self, user_id: int):
-        query = select(User).where(User.id == user_id)
-        result = await self.db.execute(query)
-        return result.scalars().first()
+    def _get_empty_response(self, address="위치 정보 없음"):
+        return HomeResponse(
+            region_address=address,
+            current_weather=[],
+            ventilation_times=[],
+            risk_forecast=[]
+        )
 
-    async def _ensure_weather_data(self, nx: int, ny: int):
+    def _calculate_best_ventilation(self, weather_data: list) -> list[VentilationTime]:
         """
-        DB에 현재 시간 이후의 데이터가 있는지 확인하고, 없으면 API를 호출하여 저장합니다.
-        기상청 발표 주기(3시간)에 맞춰 최신 데이터를 유지합니다.
+        [요구사항]
+        1. 강수확률 0% (비 절대 안 옴)
+        2. 습도 60% 이하
+        3. 시간 넉넉하고 습도 낮은 '최고의 시간' 하나만 반환
         """
-        now = datetime.now()
-
-        # 1. 현재 기상청 최신 base_time 계산 (02, 05, 08, 11, 14, 17, 20, 23시)
-        if now.hour < 2:
-            base_date = (now - timedelta(days=1)).strftime("%Y%m%d")
-            base_time = "2300"
-        else:
-            base_h = ((now.hour - 2) // 3) * 3 + 2
-            base_date = now.strftime("%Y%m%d")
-            base_time = f"{base_h:02d}00"
-
-        current_base_key = f"{base_date}{base_time}"
-        grid_key = (nx, ny)
-
-        # 2. 이미 이 base_time으로 데이터를 가져왔으면 스킵
-        if WeatherService._last_fetched_base.get(grid_key) == current_base_key:
-            return
-
-        # 3. 캐시 만료 → API 호출
-        items = await self.client.fetch_forecast(nx, ny)
-        if not items:
-            return
-
-        # 4. 데이터 가공
-        grouped_data = {}
-        for item in items:
-            category = item['category']
-            if category not in ['TMP', 'REH', 'POP']:
-                continue
-                
-            fcst_date = item['fcstDate']
-            fcst_time = item['fcstTime']
-            fcst_value = item['fcstValue']
-            
-            key = f"{fcst_date}{fcst_time}"
-            if key not in grouped_data:
-                grouped_data[key] = {}
-            grouped_data[key][category] = float(fcst_value)
-
-        new_weather_objects = []
-        for key, values in grouped_data.items():
-            if 'TMP' in values and 'REH' in values and 'POP' in values:
-                dt = datetime.strptime(key, "%Y%m%d%H%M")
-                
-                weather = Weather(
-                    date=dt,
-                    nx=nx,
-                    ny=ny,
-                    temp=values['TMP'],
-                    humid=values['REH'],
-                    rain_prob=int(values['POP']),
-                    dew_point=None,
-                )
-                new_weather_objects.append(weather)
-
-        # 5. DB 저장 (Safe Update)
-        if new_weather_objects:
-            try:
-                # [수정된 부분] 새로 받아온 데이터 중 가장 이른 시간부터 삭제
-                # 이렇게 해야 'API 데이터 시간'과 '삭제 범위'가 일치하여 중복 에러가 안 납니다.
-                min_date = min(w.date for w in new_weather_objects)
-                
-                delete_query = delete(Weather).where(
-                    Weather.nx == nx,
-                    Weather.ny == ny,
-                    Weather.date >= min_date
-                )
-                await self.db.execute(delete_query)
-                
-                self.db.add_all(new_weather_objects)
-                await self.db.commit()
-                # 저장 성공 시 캐시 키 기록
-                WeatherService._last_fetched_base[grid_key] = current_base_key
-                print(f"✅ 날씨 데이터 {len(new_weather_objects)}개 갱신 완료 (base: {current_base_key})")
-
-            except Exception as e:
-                await self.db.rollback()
-                print(f"❌ DB 저장 실패: {e}")
-
-    def _calculate_ventilation_times(self, weather_data: list) -> list[VentilationTime]:
-        recommendations = []
-        streak = [] 
-        MIN_TEMP, MAX_TEMP = -4, 27
-        MAX_HUMID, MAX_RAIN = 60, 20
+        candidates = [] 
+        current_streak = []
 
         for w in weather_data:
-            is_good = (MIN_TEMP <= w.temp <= MAX_TEMP) and \
-                      (w.humid <= MAX_HUMID) and \
-                      (w.rain_prob <= MAX_RAIN)
-
-            if is_good:
-                streak.append(w)
+            if (-5 <= w.temp <= 28) and (w.humid <= 60) and (w.rain_prob == 0):
+                current_streak.append(w)
             else:
-                if len(streak) >= 2:
-                    self._add_recommendation(recommendations, streak)
-                streak = [] 
-
-        if len(streak) >= 2:
-            self._add_recommendation(recommendations, streak)
-        return recommendations
-
-    def _add_recommendation(self, rec_list, streak):
-        start = streak[0]
-        end = streak[-1]
-        avg_humid = sum(d.humid for d in streak) / len(streak)
+                if current_streak:
+                    candidates.append(current_streak)
+                    current_streak = []
         
-        rec_list.append(VentilationTime(
-            date=start.date.strftime("%Y-%m-%d"),
-            start_time=start.date.strftime("%H:%M"),
-            end_time=end.date.strftime("%H:%M"),
-            description=f"환기 찬스! (평균 습도 {int(avg_humid)}%)"
-        ))
+        if current_streak:
+            candidates.append(current_streak)
+
+        if not candidates:
+            return [] 
+
+        # [정렬 기준] 1.지속시간(긴 순) 2.평균습도(낮은 순)
+        best_streak = sorted(
+            candidates, 
+            key=lambda s: (-len(s), sum(w.humid for w in s) / len(s))
+        )[0]
+
+        s = best_streak[0]
+        e = best_streak[-1]
+        avg_humid = sum(w.humid for w in best_streak) / len(best_streak)
+        
+        end_dt = e.date + timedelta(hours=1)
+        
+        return [VentilationTime(
+            date=s.date.strftime("%Y-%m-%d"),
+            start_time=f"{s.date.hour:02d}:00",
+            end_time=f"{end_dt.hour:02d}:00",
+            description=f"오늘의 환기 골든타임! (평균 습도 {int(avg_humid)}%)"
+        )]
+
+home_service = HomeService()

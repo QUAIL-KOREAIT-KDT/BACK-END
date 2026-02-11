@@ -3,6 +3,12 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.sql import func
 from app.core.database import Base
+from datetime import datetime
+import pytz
+
+# [Helper] 한국 시간 생성 함수
+def get_now_kst():
+    return datetime.now(pytz.timezone('Asia/Seoul'))
 
 class Diagnosis(Base):
     __tablename__ = "diagnosis"  # 실제 DB에 생성될 테이블 이름
@@ -34,7 +40,7 @@ class Diagnosis(Base):
 
     # 2. 가입일 [datetime NOW()] 해결
     # server_default=func.now() : 데이터가 들어갈 때 DB가 알아서 시간을 찍어줌
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=get_now_kst, nullable=False)
 
     # 진단 솔루션
     model_solution = Column(Text, nullable=False)
@@ -60,4 +66,4 @@ class MoldRisk(Base):
     # 사용자에게 보낼 코멘트 (예: "지하층이라 습도가 높습니다. 환기 필수!")
     message = Column(Text, nullable=True)
     
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=get_now_kst)
