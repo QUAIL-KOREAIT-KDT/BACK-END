@@ -17,6 +17,18 @@ logger = logging.getLogger(__name__)
 # 예측 확률 임계치: 이 값 미만이면 "곰팡이 특정 불가"로 처리
 CONFIDENCE_THRESHOLD = 60.0
 
+# 복합 곰팡이 감지 임계치
+MULTI_MOLD_SUM_THRESHOLD = 60.0        # G1~G4 확률 합이 이 값 이상이면 복합 곰팡이 후보
+MULTI_MOLD_INDIVIDUAL_THRESHOLD = 15.0  # 개별 클래스가 이 값 이상이어야 유의미한 곰팡이로 표시
+
+# 곰팡이 등급 → 한글 이름 매핑
+MOLD_KOREAN_NAMES = {
+    "G1": "검은곰팡이",
+    "G2": "푸른곰팡이",
+    "G3": "흰곰팡이",
+    "G4": "붉은곰팡이",
+}
+
 class DiagnosisService:
     def __init__(self, db: AsyncSession):
         self.storage = StorageClient()
@@ -39,6 +51,7 @@ class DiagnosisService:
             probability = float(prediction.get("confidence", 0.0))
             cam_heatmap = prediction.get("cam_heatmap")
             bbox = prediction.get("bbox")
+            all_probabilities = prediction.get("all_probabilities", {})
 
         except Exception as e:
             logger.error(f"EfficientNet 추론 실패: {e}")
@@ -46,6 +59,7 @@ class DiagnosisService:
             probability = 0.0
             cam_heatmap = None
             bbox = None
+            all_probabilities = {}
 
         # 2. 저장 라벨 결정 (S3 폴더 분류)
         storage_label = self._determine_storage_label(mold_name, probability)
@@ -79,8 +93,8 @@ class DiagnosisService:
                 file_ext="jpg"
             )
 
-        # 5. JSON sidecar 업로드 (bbox 좌표 + 메타데이터)
-        if bbox is not None:
+        # 5. JSON sidecar 업로드 (bbox 좌표 + 메타데이터, G0/UNCLASSIFIED 제외)
+        if storage_label not in ("G0", "UNCLASSIFIED") and bbox is not None:
             bbox_data = {
                 "image_id": file_uuid,
                 "label": mold_name,
@@ -99,21 +113,87 @@ class DiagnosisService:
             self.storage.upload_json(bbox_data, label=storage_label, file_uuid=file_uuid)
             bbox_json_str = json.dumps(bbox_data, ensure_ascii=False)
 
-        # 6. 임계치 체크: 확률이 낮으면 곰팡이 특정 불가
+        # 6. 임계치 체크: 확률이 낮으면 복합 곰팡이 또는 판별 불가
         if probability < CONFIDENCE_THRESHOLD:
-            mold_name = "UnClassified"
-            # 프론트 RagSolution.parse와 동일한 JSON 구조로 반환
-            final_solution = json.dumps({
-                "diagnosis": "AI가 곰팡이를 특정하지 못했습니다. 이미지의 화질이 낮거나, 곰팡이가 아닌 오염물일 수 있습니다.",
-                "FrequentlyVisitedAreas": [],
-                "solution": [
-                    "곰팡이 의심 부위를 가까이 접근하여 다시 사진을 찍어보세요.",
-                    "밝은 빛 아래에서 촬영하세요.",
-                    "반사가 심한 경우 각도를 바꿔 다시 시도해보세요."
-                ],
-                "prevention": [],
-                "insight": "신뢰도가 낮아 정확한 곰팡이 종류를 판별할 수 없었습니다. 위의 권장 조치를 따라 다시 진단을 시도해주세요."
-            }, ensure_ascii=False)
+            # 6-1. 복합 곰팡이 감지 시도
+            multi_info = self._check_multi_mold(all_probabilities)
+
+            if multi_info:
+                # 복합 곰팡이 확정: storage_label 오버라이드
+                storage_label = "MULTI"
+                mold_name = "MULTI"
+                probability = multi_info["total_confidence"]
+
+                # top-1 곰팡이명으로 RAG 1회 호출
+                top_mold_name = multi_info["detected_molds"][0]["class_name"]
+                rag_result = await search_service.get_mold_solution_with_rag(top_mold_name, probability)
+
+                try:
+                    rag_data = json.loads(rag_result["rag_solution"])
+                    # 진단 텍스트 앞에 복합 곰팡이 안내 삽입
+                    display_text = multi_info["display_name"] + "가 함께 검출되었습니다. 여러 곰팡이가 핀 것으로 확인됩니다."
+                    rag_data["diagnosis"] = display_text + "\n\n" + rag_data.get("diagnosis", "")
+                    rag_data["multi_mold_detail"] = {
+                        "detected_molds": [
+                            {"grade": m["grade"], "name": m["name"], "confidence": m["confidence"]}
+                            for m in multi_info["detected_molds"]
+                        ],
+                        "total_confidence": multi_info["total_confidence"]
+                    }
+                    final_solution = json.dumps(rag_data, ensure_ascii=False)
+                except (json.JSONDecodeError, TypeError):
+                    final_solution = rag_result["rag_solution"]
+
+                # MULTI는 CAM + JSON sidecar 생성 (top-1 기준 bbox 이미 계산됨)
+                if bbox is not None:
+                    cam_image_bytes = draw_bbox_on_image(file_bytes, bbox)
+                    gradcam_url = self.storage.upload_to_folder(
+                        file_bytes=cam_image_bytes,
+                        label=storage_label,
+                        file_uuid=file_uuid,
+                        folder_type="gradcam",
+                        content_type="image/jpeg",
+                        file_ext="jpg"
+                    )
+                    bbox_data = {
+                        "image_id": file_uuid,
+                        "label": multi_info["display_name"],
+                        "confidence": probability,
+                        "bbox": {
+                            "x_min": bbox[0], "y_min": bbox[1],
+                            "x_max": bbox[2], "y_max": bbox[3],
+                            "format": "xyxy", "image_size": [224, 224]
+                        },
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "model_version": "efficientnet_b0_v1.0"
+                    }
+                    self.storage.upload_json(bbox_data, label=storage_label, file_uuid=file_uuid)
+                    bbox_json_str = json.dumps(bbox_data, ensure_ascii=False)
+
+                # MULTI용 S3 원본 이미지 재업로드 (기존 UNCLASSIFIED → MULTI 폴더로)
+                original_bytes_io = io.BytesIO(file_bytes)
+                image_url = self.storage.upload_to_folder(
+                    file_bytes=original_bytes_io,
+                    label=storage_label,
+                    file_uuid=file_uuid,
+                    folder_type="dataset",
+                    content_type=file.content_type or "image/jpeg",
+                    file_ext=file_ext
+                )
+            else:
+                # 6-2. 복합 곰팡이 아님 → 기존 UnClassified 처리
+                mold_name = "UnClassified"
+                final_solution = json.dumps({
+                    "diagnosis": "AI가 곰팡이를 특정하지 못했습니다. 이미지의 화질이 낮거나, 곰팡이가 아닌 오염물일 수 있습니다.",
+                    "FrequentlyVisitedAreas": [],
+                    "solution": [
+                        "곰팡이 의심 부위를 가까이 접근하여 다시 사진을 찍어보세요.",
+                        "밝은 빛 아래에서 촬영하세요.",
+                        "반사가 심한 경우 각도를 바꿔 다시 시도해보세요."
+                    ],
+                    "prevention": [],
+                    "insight": "신뢰도가 낮아 정확한 곰팡이 종류를 판별할 수 없었습니다. 위의 권장 조치를 따라 다시 진단을 시도해주세요."
+                }, ensure_ascii=False)
         elif mold_name == "G0_NotMold":
             # 7-1. G0 확신: 곰팡이가 아님 (RAG 호출 불필요)
             final_solution = json.dumps({
@@ -172,6 +252,46 @@ class DiagnosisService:
         if mold_name == "G0_NotMold":
             return "G0"
         return mold_name.split("_")[0]  # "G1_Stachybotrys" → "G1"
+
+    def _check_multi_mold(self, all_probabilities: dict) -> dict | None:
+        """
+        복합 곰팡이 감지: G1~G4 확률 합이 60% 이상이고, 15% 이상인 곰팡이가 2개 이상이면 복합 곰팡이
+        반환: {"detected_molds": [...], "total_confidence": float, "display_name": str} 또는 None
+        """
+        mold_classes = ["G1_Stachybotrys", "G2_Penicillium", "G3_WhiteMold", "G4_Serratia"]
+
+        mold_probs = {cls: all_probabilities.get(cls, 0.0) for cls in mold_classes}
+        mold_sum = sum(mold_probs.values())
+
+        if mold_sum < MULTI_MOLD_SUM_THRESHOLD:
+            return None
+
+        # 15% 이상인 곰팡이만 유의미하게 필터링
+        significant = [
+            {
+                "grade": cls.split("_")[0],
+                "name": MOLD_KOREAN_NAMES[cls.split("_")[0]],
+                "confidence": prob,
+                "class_name": cls
+            }
+            for cls, prob in mold_probs.items()
+            if prob >= MULTI_MOLD_INDIVIDUAL_THRESHOLD
+        ]
+
+        # 유의미한 곰팡이가 2개 미만이면 복합이 아님
+        if len(significant) < 2:
+            return None
+
+        # 신뢰도 내림차순 정렬
+        significant.sort(key=lambda x: x["confidence"], reverse=True)
+
+        return {
+            "detected_molds": significant,
+            "total_confidence": round(mold_sum, 1),
+            "display_name": " + ".join(
+                f"{m['grade']}({m['name']})" for m in significant
+            )
+        }
 
     async def _handle_g3_white_mold(self, mold_name: str, probability: float) -> str:
         """

@@ -106,7 +106,11 @@ class EfficientNetEngine:
             "class_name": MOLD_CLASSES[predicted_idx],
             "confidence": round(confidence * 100, 1),
             "cam_heatmap": None,
-            "bbox": None
+            "bbox": None,
+            "all_probabilities": {
+                MOLD_CLASSES[i]: round(float(probabilities[i]) * 100, 1)
+                for i in range(len(MOLD_CLASSES))
+            }
         }
 
         if generate_cam:

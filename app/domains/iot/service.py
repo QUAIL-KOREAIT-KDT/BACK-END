@@ -28,6 +28,10 @@ class IotService:
         if self._initialized:
             return
 
+        self._connect()
+
+    def _connect(self):
+        """Tuya API 연결 (초기화 또는 재연결)"""
         if not all([settings.TUYA_ACCESS_ID, settings.TUYA_ACCESS_SECRET]):
             raise RuntimeError("Tuya API 자격 증명이 설정되지 않았습니다.")
 
@@ -39,10 +43,17 @@ class IotService:
         response = self._api.connect()
         if not response.get("success", False):
             logger.error(f"Tuya API 연결 실패: {response}")
+            self._initialized = False
             raise RuntimeError("Tuya API 연결에 실패했습니다.")
 
         self._initialized = True
         logger.info("Tuya API 연결 성공")
+
+    def _reconnect(self):
+        """토큰 만료 등의 이유로 재연결"""
+        logger.info("Tuya API 재연결 시도...")
+        self._initialized = False
+        self._connect()
 
     def is_master_user(self, user_id: int) -> bool:
         """마스터 유저(개발자) 여부 확인"""
@@ -51,11 +62,23 @@ class IotService:
             and user_id == settings.IOT_MASTER_USER_ID
         )
 
+    def _is_token_error(self, response: dict) -> bool:
+        """토큰 만료/무효 에러인지 확인"""
+        code = response.get("code", 0)
+        # Tuya 토큰 관련 에러 코드: 1010(토큰 무효), 1012(토큰 만료)
+        return code in (1010, 1012)
+
     async def get_devices(self) -> list[IotDeviceResponse]:
         """마스터 Tuya 계정에 등록된 기기 목록 조회"""
         self._ensure_initialized()
 
         response = self._api.get(f"/v1.0/users/{settings.TUYA_UID}/devices")
+
+        # 토큰 만료 시 재연결 후 재시도
+        if not response.get("success", False) and self._is_token_error(response):
+            logger.warning(f"토큰 만료 감지, 재연결 시도: code={response.get('code')}")
+            self._reconnect()
+            response = self._api.get(f"/v1.0/users/{settings.TUYA_UID}/devices")
 
         if not response.get("success", False):
             logger.error(f"기기 목록 조회 실패: {response}")
@@ -112,6 +135,15 @@ class IotService:
             f"/v1.0/devices/{device_id}/commands",
             commands,
         )
+
+        # 토큰 만료 시 재연결 후 재시도
+        if not response.get("success", False) and self._is_token_error(response):
+            logger.warning(f"토큰 만료 감지, 재연결 후 기기 제어 재시도: {device_id}")
+            self._reconnect()
+            response = self._api.post(
+                f"/v1.0/devices/{device_id}/commands",
+                commands,
+            )
 
         if not response.get("success", False):
             logger.error(f"기기 제어 실패 ({device_id}): {response}")
