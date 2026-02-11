@@ -2,132 +2,194 @@
 
 import math
 
-def calculate_predicted_mold_risk(
+def get_saturation_pressure(temp: float) -> float:
+    """
+    Magnus Formula를 이용한 포화 수증기압(hPa) 계산
+    """
+    return 6.112 * math.exp((17.62 * temp) / (243.12 + temp))
+
+def get_vapor_pressure(temp: float, rh: float) -> float:
+    """
+    현재 온도와 상대습도로 실제 수증기압(hPa) 계산
+    """
+    return get_saturation_pressure(temp) * (rh / 100.0)
+
+def _estimate_indoor_temp_sine_curve(t_out: float) -> float:
+    """
+    [AI 예측 모델 1] 실내 온도 추정 (Sine 곡선 모델)
+    - 겨울(5도 이하): 21도 유지
+    - 여름(30도 이상): 26도 유지
+    - 그 외 구간: 사인 함수로 부드럽게 연결
+    """
+    if t_out <= 5:
+        return 21.0
+    elif t_out >= 30:
+        return 26.0
+    else:
+        # 5~30도 구간을 0 ~ PI/2 라디안으로 매핑하여 사인 곡선 적용
+        # (t_out - 5) / 25 -> 0.0 ~ 1.0
+        ratio = (t_out - 5) / 25.0
+        # 21도에서 시작하여 최대 +5도(26도)까지 상승
+        return 21.0 + 5.0 * math.sin((math.pi / 2) * ratio)
+
+def _estimate_indoor_humidity_iso(t_out: float, rh_out: float, t_in_estimated: float) -> float:
+    """
+    [AI 예측 모델 2] 실내 습도 추정 (ISO 13788 Class 4)
+    - 환기가 부족한 환경을 가정하여 실내 습기 부하(Moisture Excess) 계산
+    """
+    # 1. 습기 부하(Excess Vapor Pressure) 계산 (단위: Pa -> hPa 변환 필요)
+    # 공식: Excess = 810 Pa * (20 - T_out) / 20  (T_out < 20일 때)
+    # 1 hPa = 100 Pa 이므로, 8.10 hPa 사용
+    if t_out >= 20:
+        excess_vp = 0.0
+    else:
+        excess_vp = 8.10 * ((20 - t_out) / 20.0)
+    
+    # 2. 실외 절대 수증기압
+    p_out = get_vapor_pressure(t_out, rh_out)
+
+    # 3. 예측된 실내 절대 수증기압 = 실외 + 습기부하
+    p_in_predicted = p_out + excess_vp
+    
+    # 4. 예측된 실내 온도의 포화수증기압
+    p_sat_in = get_saturation_pressure(t_in_estimated)
+    
+    # 5. 상대습도로 변환
+    if p_sat_in <= 0: return 0.0
+    estimated_rh = (p_in_predicted / p_sat_in) * 100.0
+    
+    return min(100.0, max(0.0, estimated_rh))
+
+
+def calculate_mold_risk(
     t_out: float,      # 실외 기온 (기상청)
     rh_out: float,     # 실외 습도 (기상청)
-    direction: str,    # 집 방향 ("N", "S"...)
-    floor_type: str,   # 층수 ("basement"...)
-    t_in_real: float = None,  # [NEW] 사용자 입력 실내 온도 (없으면 None)
-    rh_in_real: float = None  # [NEW] 사용자 입력 실내 습도 (없으면 None)
+    direction: str,    # 창문 방향 ("S", "SE" 등)
+    floor_type: str,   # 거주 형태 ("underground" 등)
+    t_in_real: float = None,  # 사용자 입력 온도 (Optional)
+    rh_in_real: float = None  # 사용자 입력 습도 (Optional)
 ) -> dict:
     """
-    [하이브리드 곰팡이 위험 진단 시스템]
-    
-    Case A: 사용자 입력 데이터가 있는 경우 (Real-time Data)
-      -> 실제 실내 온/습도를 기반으로 벽체 결로를 정밀 계산
-      
-    Case B: 사용자 입력 데이터가 없는 경우 (Simulation Mode)
-      -> ISO 13788 표준 모델을 이용해 실내 환경을 과학적으로 추정하여 계산
+    [하이브리드 곰팡이 위험도 계산 엔진]
+    1. 실내 데이터가 하나라도 없으면 AI 모델로 추측
+    2. 벽면 상대습도(RH_surface) 계산
+    3. 100% 초과 시 '결로(Condensation)' 상태로 판정 및 강력 경고
     """
 
-    # --- [Step 1] 물리학적 상수 및 함수 정의 ---
-    b, c = 17.62, 243.12 
-    
-    def get_saturation_pressure(temp):
-        """포화 수증기압(hPa) 계산 (Magnus Formula)"""
-        return 6.112 * math.exp((b * temp) / (c + temp))
+    # --- [Step 1] 실내 환경 결정 (Hybrid Logic) ---
+    used_simulated_temp = False
+    used_simulated_humid = False
 
-    def get_vapor_pressure(temp, rh):
-        """실제 수증기압(hPa) 계산"""
-        return get_saturation_pressure(temp) * (rh / 100.0)
-
-    # --- [Step 2] 실내 환경 결정 (Hybrid Logic) ---
-    is_simulated = False
-    
-    if t_in_real is not None and rh_in_real is not None:
-        # [Case A] 실측 데이터 사용
+    # 1-1. 실내 온도 결정
+    if t_in_real is not None:
         t_in_final = t_in_real
-        rh_in_final = rh_in_real
-        
-        # 실내 절대 수증기압 계산 (실측값 기반)
-        p_in_final = get_vapor_pressure(t_in_final, rh_in_final)
-        
-        simulation_note = "사용자 실측 데이터 기반 정밀 진단"
     else:
-        # [Case B] 예측 시뮬레이션 가동 (기존 로직)
-        is_simulated = True
-        
-        # B-1. 실내 온도 추정
-        if t_out < 15: t_in_final = 21.0       # 난방 가동
-        elif t_out > 26: t_in_final = 25.0     # 냉방 가동
-        else: t_in_final = t_out + 1.0         # 자연 환기
-        
-        # B-2. 실내 습기 부하(Moisture Excess) 모델링
-        if t_out <= 0: moisture_excess = 8.10
-        elif t_out >= 20: moisture_excess = 0.0
-        else: moisture_excess = 8.10 * ((20 - t_out) / 20)
-        
-        # 실외 절대 수증기압
-        p_out = get_vapor_pressure(t_out, rh_out)
-        
-        # 예측된 실내 절대 수증기압 = 실외 + 생활습기
-        p_in_final = p_out + moisture_excess
-        
-        # 예측된 실내 상대습도 환산
-        p_sat_in = get_saturation_pressure(t_in_final)
-        rh_in_final = (p_in_final / p_sat_in) * 100.0
-        rh_in_final = min(100.0, rh_in_final)
-        
-        simulation_note = "실외 날씨 기반 AI 예측 모델"
+        t_in_final = _estimate_indoor_temp_sine_curve(t_out)
+        used_simulated_temp = True
+
+    # 1-2. 실내 습도 결정
+    if rh_in_real is not None:
+        rh_in_final = rh_in_real
+    else:
+        rh_in_final = _estimate_indoor_humidity_iso(t_out, rh_out, t_in_final)
+        used_simulated_humid = True
+
+    # 모드 기록
+    mode = "MEASURED"
+    if used_simulated_temp or used_simulated_humid:
+        mode = "SIMULATED"
 
 
-    # --- [Step 3] 벽체 표면 분석 (공통 물리학) ---
+    # --- [Step 2] 벽체 표면 분석 (물리학) ---
     
-    # 3-1. 열관류율 관련 환경 계수 (f_Rsi)
-    f_rsi = 0.70 # 기본값
-    if direction == "N": f_rsi -= 0.05
-    if floor_type in ["underground", "semi-basement"]: f_rsi -= 0.10
+    # 2-1. 열관류율 환경 계수 (f_Rsi) 보정
+    # 기본값 0.7 (일반 단열)
+    f_rsi = 0.70 
+    
+    # 북향 계열(햇빛 부족) -> f_rsi 감소
+    if direction in ["N", "NW", "NE"]: 
+        f_rsi -= 0.05
+    
+    # 지하/반지하(지열/습기) -> f_rsi 대폭 감소
+    if floor_type in ["underground", "semi-basement"]: 
+        f_rsi -= 0.15 
 
-    # 3-2. 가장 차가운 벽의 온도(T_wall) 도출
-    # 공식: T_wall = T_in - (T_in - T_out) * (1 - f_Rsi)
-    # 설명: 실내 온도가 높아도 단열이 나쁘면 벽은 실외 온도에 가까워짐
+    # 2-2. 벽 표면 온도 (T_wall) 도출
+    # T_wall = T_in - (T_in - T_out) * (1 - f_Rsi)
     t_wall = t_in_final - (t_in_final - t_out) * (1 - f_rsi)
 
-    # 3-3. 벽 표면 상대습도 (Surface RH)
-    # 벽 표면 온도에서의 포화수증기압
+    # 2-3. 실내 절대 수증기압 (현재 공기 상태)
+    p_in_final = get_vapor_pressure(t_in_final, rh_in_final)
+
+    # 2-4. 벽 표면 상대습도 (Surface RH)
     p_sat_wall = get_saturation_pressure(t_wall)
     
-    # 벽 표면 상대습도 = (실내 수증기압 / 벽 포화수증기압)
-    if p_sat_wall == 0: rh_surface = 100.0
-    else: rh_surface = (p_in_final / p_sat_wall) * 100.0
-
-
-    # --- [Step 4] 최종 위험 점수 산출 ---
-    risk_score = 0
-    if rh_surface <= 60:
-        risk_score = (rh_surface / 60) * 20
-    elif rh_surface <= 80:
-        risk_score = 20 + ((rh_surface - 60) / 20) * 50
+    if p_sat_wall <= 0:
+        rh_surface = 100.0 # 예외처리
     else:
-        risk_score = 70 + ((rh_surface - 80) / 20) * 30
+        rh_surface = (p_in_final / p_sat_wall) * 100.0
 
-    final_score = min(100, max(0, risk_score))
+
+    # --- [Step 3] 위험 점수 산출 및 결로 판정 ---
     
-    # 상태 메시지 생성
-    if final_score >= 80:
-        status = "위험 (곰팡이 활성)"
-        if is_simulated:
-            advice = "벽지 안쪽이 젖어있을 가능성이 높습니다. 습도계를 확인해보세요."
-        else:
-            advice = f"실내 습도({round(rh_in_final)}%)가 너무 높습니다. 당장 환기하세요!"
-            
-    elif final_score >= 60:
-        status = "주의 (결로 구간)"
-        advice = "벽이 차가워 습기가 몰리고 있습니다. 제습기를 켜주세요."
+    is_condensation = False
+    
+    # 100%를 넘으면 이미 물방울이 맺힌 상태(결로)
+    if rh_surface >= 100.0:
+        is_condensation = True
+        risk_score = 100.0 # 위험도 MAX 고정
+        rh_surface = min(rh_surface, 120.0) # 로그용 상한선 (120%까지만 기록)
     else:
-        status = "양호"
-        advice = "현재 곰팡이로부터 안전한 환경입니다."
+        # 정상 범위 구간별 점수화
+        if rh_surface <= 60:
+            # 0~60% -> 0~20점 (안전)
+            risk_score = (rh_surface / 60.0) * 20
+        elif rh_surface <= 80:
+            # 60~80% -> 20~70점 (주의 구간, 기울기 급함)
+            risk_score = 20 + ((rh_surface - 60) / 20.0) * 50
+        else:
+            # 80~100% -> 70~100점 (위험 구간)
+            risk_score = 70 + ((rh_surface - 80) / 20.0) * 30
+
+    final_score = min(100.0, max(0.0, risk_score))
+
+
+    # --- [Step 4] 결과 반환 (메시지 강화) ---
+    
+    # 기본값
+    level = "SAFE"
+    title = "안전"
+    msg = "곰팡이 포자가 활동할 수 없는 쾌적한 환경입니다."
+
+    if is_condensation: # 100% 초과 (결로)
+        level = "DANGER"
+        title = "💦 결로 발생 (매우 위험)"
+        msg = "벽이 젖었습니다! 방치하면 48시간 내 곰팡이가 번식합니다."
+        
+    elif final_score >= 80: # 80~100%
+        level = "DANGER"
+        title = "🍄 곰팡이 활성 경고"
+        msg = "벽지가 눅눅합니다. 숨어있던 곰팡이 포자가 뿌리를 내리고 있습니다."
+        
+    elif final_score >= 60: # 60~80%
+        level = "WARNING"
+        title = "💧 습기 주의"
+        msg = "벽 표면이 차갑습니다. 환기하지 않으면 결로가 생깁니다."
 
     return {
         "score": round(final_score, 1),
-        "status": status,
-        "message": advice,
+        "level": level,
+        "title": title, # [추가] UI 제목용
+        "message": msg,
         "details": {
-            "mode": "MEASURED" if not is_simulated else "SIMULATED",
-            "indoor_temp": round(t_in_final, 1),
-            "indoor_humid": round(rh_in_final, 1),
-            "wall_temp": round(t_wall, 1),
-            "surface_humidity": round(rh_surface, 1),
-            "note": simulation_note
+            "mode": mode,
+            "is_condensation": is_condensation,
+            "simulated_temp": used_simulated_temp,
+            "simulated_humid": used_simulated_humid,
+            "t_out": t_out,
+            "t_in": round(t_in_final, 1),
+            "h_in": round(rh_in_final, 1),
+            "t_wall": round(t_wall, 1),
+            "h_surface": round(rh_surface, 1)
         }
     }

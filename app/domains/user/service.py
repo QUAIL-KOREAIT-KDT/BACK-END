@@ -2,14 +2,18 @@
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.domains.user.models import User
 from app.domains.user.repository import UserRepository
 from app.utils.location import get_lat_lon_from_address, map_to_grid, find_nearest_city
 from datetime import datetime, timedelta
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, and_
 from app.domains.diagnosis.models import MoldRisk
 from app.domains.home.models import Weather
 from app.domains.home.client import WeatherClient
-from app.domains.home.utils import calculate_predicted_mold_risk
+from app.domains.home.utils import calculate_mold_risk
+import logging
+
+logger = logging.getLogger(__name__)
 
 class UserService:
     def __init__(self):
@@ -65,7 +69,7 @@ class UserService:
             
         # 3. 위험도 재계산 (조건 충족 시)
         if should_recalculate and user.grid_nx and user.grid_ny:
-            await self._recalculate_risk(db, user)
+            await self._recalculate_max_risk(db, user)
             
         return user
     
@@ -88,89 +92,87 @@ class UserService:
         # 3. 유저 객체와 신규 여부를 같이 반환
         return user, is_new_user
     
-    async def _recalculate_risk(self, db: AsyncSession, user):
-        """변경된 정보를 바탕으로 즉시 곰팡이 위험도 재진단"""
-        print(f"🔄 [Risk Update] 정보 변경 감지! {user.nickname}님의 위험도 재계산 중...")
-        
-        today = datetime.now().date()
-        start_dt = datetime.combine(today, datetime.min.time())
-        end_dt = datetime.combine(today, datetime.max.time())
-
-        # 1. 기존 데이터 삭제 (오늘 날짜 이후 데이터 리셋)
-        await db.execute(delete(MoldRisk).where(
-            MoldRisk.user_id == user.id,
-        ))
-
-        # 2. 해당 지역 날씨 데이터 조회
-        w_res = await db.execute(select(Weather).where(
-            Weather.nx == user.grid_nx,
-            Weather.ny == user.grid_ny,
-            Weather.date >= start_dt,
-            Weather.date <= end_dt
-        ))
-        weather_logs = w_res.scalars().all()
-
-        # 3. 날씨 데이터 없으면 긴급 수집 (주소가 바뀌었을 경우 대비)
-        if not weather_logs:
-            print(f"⚠️ 날씨 데이터 없음. API 긴급 호출 (nx={user.grid_nx}, ny={user.grid_ny})")
-            client = WeatherClient()
-            items = await client.fetch_forecast(user.grid_nx, user.grid_ny)
+    async def _recalculate_max_risk(self, db: AsyncSession, user: User):
+        """
+        [일일 최대 위험도 재계산 로직]
+        1. 오늘 날짜의 모든 날씨 데이터 조회
+        2. 시간대별 위험도 계산
+        3. 개중 '최대값(Max)'을 찾아 MoldRisk 테이블에 저장
+        """
+        try:
+            today = datetime.now().date()
             
-            if items:
-                new_weathers = []
-                grouped_data = {}
-                for item in items:
-                    cat = item['category']
-                    if cat not in ['TMP', 'REH', 'POP']: continue
-                    dt_str = f"{item['fcstDate']}{item['fcstTime']}"
-                    if dt_str not in grouped_data: grouped_data[dt_str] = {}
-                    grouped_data[dt_str][cat] = float(item['fcstValue'])
-                
-                for dt_str, val in grouped_data.items():
-                    if 'TMP' in val and 'REH' in val and 'POP' in val:
-                        dt = datetime.strptime(dt_str, "%Y%m%d%H%M")
-                        # 이슬점 계산 필수
-                        calc_dew_point = val['TMP'] - ((100 - val['REH']) / 5)
-                        
-                        new_weathers.append(Weather(
-                            date=dt, nx=user.grid_nx, ny=user.grid_ny,
-                            temp=val['TMP'], humid=val['REH'], rain_prob=int(val['POP']),
-                            dew_point=calc_dew_point
-                        ))
-                
-                if new_weathers:
-                    db.add_all(new_weathers)
-                    await db.commit()
-                    weather_logs = new_weathers
-        
-        # 4. 하이브리드 엔진으로 재계산
-        valid_logs = [w for w in weather_logs if w.dew_point is not None]
-        
-        if valid_logs:
-            # 최악의 조건(최저 이슬점) 선택
-            target_weather = min(valid_logs, key=lambda w: w.dew_point)
-            
-            # [핵심 변경] 신규 엔진 호출
-            risk_result = calculate_predicted_mold_risk(
-                t_out=target_weather.temp,
-                rh_out=target_weather.humid,
-                direction=user.window_direction,
-                floor_type=user.underground,
-                t_in_real=user.indoor_temp,      # 사용자 입력값 반영
-                rh_in_real=user.indoor_humidity  # 사용자 입력값 반영
+            # 1. 기존 오늘자 위험도 데이터 삭제 (중복 방지)
+            # (만약 로그성으로 쌓아야 한다면 삭제하지 않고 INSERT만 수행)
+            await db.execute(
+                delete(MoldRisk).where(
+                    and_(
+                        MoldRisk.user_id == user.id,
+                        MoldRisk.target_date >= datetime.combine(today, datetime.min.time()),
+                        MoldRisk.target_date <= datetime.combine(today, datetime.max.time())
+                    )
+                )
             )
+
+            # 2. 오늘 날씨 데이터 전체 조회
+            start_dt = datetime.combine(today, datetime.min.time())
+            end_dt = datetime.combine(today, datetime.max.time())
             
-            new_risk = MoldRisk(
-                user_id=user.id,
-                risk_score=risk_result['score'],
-                risk_level=risk_result['status'],
-                target_date=start_dt,
-                message=risk_result['message']
+            weather_query = select(Weather).where(
+                and_(
+                    Weather.nx == user.grid_nx,
+                    Weather.ny == user.grid_ny,
+                    Weather.date >= start_dt,
+                    Weather.date <= end_dt
+                )
             )
-            db.add(new_risk)
-            await db.commit()
-            print(f"✅ [Risk Update] 재계산 완료: {risk_result['status']} ({risk_result['score']}점)")
-        else:
-            print("❌ 날씨 데이터를 확보하지 못해 재계산 실패")
+            result = await db.execute(weather_query)
+            weather_list = result.scalars().all()
+
+            if not weather_list:
+                logger.warning(f"User {user.id}: 날씨 데이터가 없어 위험도 재계산 건너뜀")
+                return
+
+            # 3. 최대 위험도 찾기
+            max_risk_data = None
+            max_score = -1.0
+
+            # 사용자 환경 설정
+            direction = user.window_direction or "S"
+            floor_type = user.underground or "others"
+            t_in = user.indoor_temp
+            h_in = user.indoor_humidity
+
+            for w in weather_list:
+                risk = calculate_mold_risk(
+                    t_out=w.temp,
+                    rh_out=w.humid,
+                    direction=direction,
+                    floor_type=floor_type,
+                    t_in_real=t_in,
+                    rh_in_real=h_in
+                )
+                
+                # 최대값 갱신
+                if risk['score'] > max_score:
+                    max_score = risk['score']
+                    max_risk_data = risk
+
+            # 4. 저장 (최대값)
+            if max_risk_data:
+                new_risk = MoldRisk(
+                    user_id=user.id,
+                    target_date=datetime.now(), # 현재 시간 기록
+                    risk_score=max_risk_data['score'],
+                    risk_level=max_risk_data['level'],   # "DANGER", "WARNING", "SAFE"
+                    message=max_risk_data['message']     # 메시지 저장
+                )
+                db.add(new_risk)
+                await db.commit()
+                logger.info(f"User {user.id}: 곰팡이 위험도 재계산 완료 (Max Score: {max_score})")
+
+        except Exception as e:
+            logger.error(f"위험도 재계산 중 오류 발생: {e}")
+            await db.rollback()
     
     

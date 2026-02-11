@@ -8,79 +8,125 @@ from app.domains.home.models import Weather
 from app.domains.user.models import User
 from app.domains.diagnosis.models import MoldRisk
 from app.domains.home.client import WeatherClient
-from app.utils.location import MAJOR_CITIES
-from app.domains.home.utils import calculate_predicted_mold_risk
+from app.domains.home.utils import calculate_mold_risk
 import logging
+import pytz
 
 logger = logging.getLogger(__name__)
+
+# [설정] 대한민국 주요 12개 지역 좌표 (nx, ny)
+# 서울, 부산, 인천, 대구, 대전, 광주, 수원, 울산, 창원, 고양, 용인, 제주
+TARGET_REGIONS = [
+    (60, 127),  # 서울
+    (55, 124),  # 인천
+    (60, 121),  # 수원
+    (73, 134),  # 춘천
+    (92, 131),  # 강릉
+    (67, 100),  # 대전
+    (69, 106),  # 청주
+    (58, 74),   # 광주
+    (63, 89),   # 전주
+    (89, 90),   # 대구
+    (98, 76),   # 부산
+    (52, 38),   # 제주
+]
 
 # ====================================================
 # [Task 1] 00:00 - 날씨 수집 및 '이슬점 계산' 저장
 # ====================================================
 async def fetch_daily_weather_job():
-    print(f"⏰ [Weather Job] 12개 주요 도시 데이터 수집 시작...")
+    """
+    [매일 00:00 KST 실행]
+    1. 기존 날씨 데이터 전체 삭제
+    2. 12개 지역에 대해 오늘 01:00 ~ 내일 00:00 데이터 수집 및 저장
+    3. 온도/습도는 소수점 첫째 자리 반올림
+    """
+    logger.info("🌤️ [Scheduler] 일일 날씨 데이터 갱신 시작 (12개 지역)")
     
-    client = WeatherClient()
-    success_count = 0
-    now = datetime.now()
-
     async with AsyncSessionLocal() as db:
-        # 2. [과거 데이터 삭제] 현재 기준 과거의 데이터는 삭제
-        await db.execute(delete(Weather).where(Weather.date < now))
+        try:
+            # 1. 기존 데이터 전체 삭제 (Reset)
+            await db.execute(delete(Weather))
+            await db.commit()
+            logger.info("🗑️ [Scheduler] 기존 날씨 데이터 초기화 완료")
 
-        for city in MAJOR_CITIES:
-            nx, ny = city['nx'], city['ny']
+            client = WeatherClient()
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             
-            items = await client.fetch_forecast(nx, ny)
-            if not items:
-                continue
+            # API 요청 기준 시각 (어제 23시 예보를 조회하여 오늘 00~24시 커버)
+            # 단, 안전하게 오늘 00시 기준 BaseTime 사용
+            base_date = now.strftime("%Y%m%d")
+            base_time = "0200" # 02시 예보부터 안정적으로 조회 (혹은 전날 23시)
 
-            # 데이터 피벗 및 1. [중복 제거] 의미가 같은 데이터는 없도록 딕셔너리 활용
-            grouped_data = {}
-            for item in items:
-                cat = item['category']
-                if cat not in ['TMP', 'REH', 'POP']: continue
-                
-                dt_str = f"{item['fcstDate']}{item['fcstTime']}"
-                if dt_str not in grouped_data: 
-                    grouped_data[dt_str] = {}
-                grouped_data[dt_str][cat] = float(item['fcstValue'])
+            total_inserted = 0
 
-            new_weathers = []
-            for dt_str, val in grouped_data.items():
-                if 'TMP' in val and 'REH' in val and 'POP' in val:
-                    dt = datetime.strptime(dt_str, "%Y%m%d%H%M")
+            for nx, ny in TARGET_REGIONS:
+                # 외부 API 호출
+                items = await client.fetch_forecast(nx, ny) 
+                if not items:
+                    continue
+
+                grouped_data = {}
+                # 데이터 파싱
+                for item in items:
+                    cat = item['category']
+                    if cat not in ['TMP', 'REH', 'POP']: continue
                     
-                    # 3. [시간 제한] 09시부터 23시까지의 데이터만 연산하여 저장
-                    if 9 <= dt.hour <= 23:
-                        # 이슬점(Dew Point) 계산
-                        calc_dew_point = val['TMP'] - ((100 - val['REH']) / 5)
-                        
-                        new_weathers.append(Weather(
-                            date=dt, nx=nx, ny=ny,
-                            temp=val['TMP'], 
-                            humid=val['REH'], 
-                            rain_prob=int(val['POP']),
-                            dew_point=calc_dew_point
-                        ))
-            
-            if not new_weathers: continue
+                    # 날짜/시간 키 생성
+                    fcst_date = item['fcstDate']
+                    fcst_time = item['fcstTime']
+                    key = f"{fcst_date}{fcst_time}"
+                    
+                    if key not in grouped_data: grouped_data[key] = {}
+                    grouped_data[key][cat] = float(item['fcstValue'])
 
-            try:
-                # [중복 방지] 동일 좌표/시간의 신규 데이터 반영 전 기존 데이터 삭제
-                min_date = min(w.date for w in new_weathers)
-                await db.execute(delete(Weather).where(
-                    Weather.nx == nx, 
-                    Weather.ny == ny, 
-                    Weather.date >= min_date
-                ))
-                
-                db.add_all(new_weathers)
-                await db.commit()
-                success_count += 1
-            except Exception as e:
-                await db.rollback()
-                print(f"❌ {city['name']} 저장 실패: {e}")
+                # DB 객체 생성
+                new_objs = []
+                for key, vals in grouped_data.items():
+                    if 'TMP' in vals and 'REH' in vals and 'POP' in vals:
+                        dt = datetime.strptime(key, "%Y%m%d%H%M")
+                        
+                        # [필터링] 오늘 01:00 ~ 내일 00:00 데이터만 저장
+                        # (단, API가 보통 3일치 주므로 날짜 필터링 필수)
+                        
+                        # 타겟 범위 설정
+                        target_start = now.replace(hour=1, minute=0, second=0, microsecond=0)
+                        target_end = target_start + timedelta(days=1) # 내일 01:00 전까지 -> 즉 내일 00:00 포함
+                        
+                        # timezone info 제거 후 비교 (API 데이터는 naive)
+                        dt_naive = dt.replace(tzinfo=None)
+                        start_naive = target_start.replace(tzinfo=None)
+                        # 내일 00:00까지만 (다음날 00:00 = 오늘 24:00)
+                        end_naive = (start_naive + timedelta(hours=23)).replace(minute=59)
+
+                        if start_naive <= dt_naive <= end_naive + timedelta(minutes=1):
+                            # [요구사항] 소수점 첫째 자리 반올림
+                            temp = round(vals['TMP'], 1)
+                            humid = round(vals['REH'], 1)
+                            
+                            new_objs.append(Weather(
+                                date=dt,
+                                nx=nx,
+                                ny=ny,
+                                temp=temp,
+                                humid=humid,
+                                rain_prob=int(vals['POP'])
+                            ))
+
+                if new_objs:
+                    db.add_all(new_objs)
+                    total_inserted += len(new_objs)
+
+            await db.commit()
+            logger.info(f"✅ [Scheduler] 총 {total_inserted}개 날씨 데이터 저장 완료")
+            
+            # (옵션) 데이터가 갱신되었으니 위험도 분석 등의 후속 작업 실행 가능
+            # await calculate_daily_risk_job() 
+
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"❌ [Scheduler] 날씨 갱신 실패: {e}")
 
 # [Task 2] 곰팡이 위험도 계산 Job (여기가 핵심 변경!)
 async def calculate_daily_risk_job():
@@ -118,18 +164,17 @@ async def calculate_daily_risk_job():
             # ---------------------------------------------------------
             # [핵심] 여기서 utils.py의 'calculate_predicted_mold_risk' 호출
             # ---------------------------------------------------------
-            risk_result = calculate_predicted_mold_risk(
+            risk_result = calculate_mold_risk(
                 t_out=target_weather.temp,
                 rh_out=target_weather.humid,
                 direction=user.window_direction,
                 floor_type=user.underground,
-                # ▼ 사용자 데이터 주입 (DB에 값이 없으면 None이 들어가며 자동 시뮬레이션 전환)
                 t_in_real=user.indoor_temp,
                 rh_in_real=user.indoor_humidity
             )
             
             score = risk_result['score']
-            level = risk_result['status']
+            level = risk_result['level']
             msg = risk_result['message']
             
             # DB 저장 (Upsert)
