@@ -1,6 +1,7 @@
 # BACK-END/app/domains/home/service.py
 
 from datetime import datetime, timedelta
+import pytz
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
@@ -36,8 +37,9 @@ class HomeService:
         nx = user.grid_nx or 60 
         ny = user.grid_ny or 127
 
-        # 2. 시간 설정
-        now = datetime.now()
+        # 2. 시간 설정 (KST 강제 적용)
+        kst = pytz.timezone('Asia/Seoul')
+        now = datetime.now(kst)
         # [Target Time] 현재 시간 + 1시간 (분/초 0으로 초기화)
         target_time = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         
