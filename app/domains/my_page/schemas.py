@@ -13,6 +13,7 @@ class DiagnosisOutput(BaseModel):
     result: str
     confidence: float
     image_path: str
+    gradcam_image_path: str | None = None
     mold_location: str
     created_at: datetime
     model_solution: str
@@ -20,6 +21,7 @@ class DiagnosisOutput(BaseModel):
 class Thumbnail(BaseModel):
     id: int
     image_path: str
+    gradcam_image_path: str | None = None
     created_at: datetime
     result: str = ''
     mold_location: str = ''

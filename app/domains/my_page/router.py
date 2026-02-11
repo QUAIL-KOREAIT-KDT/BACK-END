@@ -31,6 +31,7 @@ async def get_diagnosis_info(
         "result": result.result,
         "confidence": result.confidence,
         "image_path": result.image_path,
+        "gradcam_image_path": result.gradcam_image_path,
         "mold_location": result.mold_location,
         "created_at": result.created_at,
         "model_solution": result.model_solution,

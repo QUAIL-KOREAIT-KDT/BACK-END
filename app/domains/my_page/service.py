@@ -13,6 +13,7 @@ class MyPageService:
                 {
                 "id": record.id,
                 "image_path": record.image_path,
+                "gradcam_image_path": record.gradcam_image_path,
                 "created_at": record.created_at,
                 "result": record.result,
                 "mold_location": record.mold_location
