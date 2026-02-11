@@ -1,6 +1,7 @@
 # BACK-END/app/core/scheduler.py
 
 import asyncio
+import math
 from datetime import datetime, timedelta
 from sqlalchemy import select, func, delete
 from app.core.database import AsyncSessionLocal
@@ -31,6 +32,25 @@ TARGET_REGIONS = [
     (52, 38),   # 제주
 ]
 
+def calculate_dew_point(temp, humid):
+    if temp is None or humid is None:
+        return None
+    try:
+        # 로그 계산 시 에러 방지 (습도 0 이하인 경우 등)
+        if humid <= 0: return temp 
+        
+        # 상수 설정
+        b = 17.62
+        c = 243.12
+        
+        # 공식 적용
+        gamma = math.log(humid / 100.0) + ((b * temp) / (c + temp))
+        dew_point = (c * gamma) / (b - gamma)
+        
+        return round(dew_point, 1)
+    except Exception:
+        return None
+    
 # ====================================================
 # [Task 1] 00:00 - 날씨 수집 및 '이슬점 계산' 저장
 # ====================================================
@@ -99,14 +119,16 @@ async def fetch_daily_weather_job():
                             # [요구사항] 소수점 첫째 자리 반올림
                             temp = round(vals['TMP'], 1)
                             humid = round(vals['REH'], 1)
-                            
+                            dew = calculate_dew_point(temp, humid)
+
                             new_objs.append(Weather(
                                 date=dt,
                                 nx=nx,
                                 ny=ny,
                                 temp=temp,
                                 humid=humid,
-                                rain_prob=int(vals['POP'])
+                                rain_prob=int(vals['POP']),
+                                dew_point=dew
                             ))
 
                 if new_objs:

@@ -18,9 +18,9 @@ class HomeService:
     async def get_home_view(self, user_id: int, db: AsyncSession) -> HomeResponse:
         """
         메인 홈 화면 데이터 조회
-        1. 곰팡이 위험도: 오늘 하루치 중 [최대, 최소, 현재(+1h)] 3개 반환
-        2. 날씨 정보: 현재 시간 + 1시간 (Target Time) 데이터 1개만 반환
-        3. 환기 정보: 오늘 하루치 중 '가장 좋고 긴 시간' 1개만 반환
+        1. 곰팡이 위험도: 오늘 하루치 중 [최대, 최소, 현재] 반환
+        2. 날씨 정보: 현재 시간 + 1시간 (Target Time) 데이터 반환
+        3. 환기 정보: 오늘 하루치 중 '가장 좋고 긴 시간' 반환
         """
         # 1. 사용자 정보 조회
         user = await self.user_repo.get_user_by_id(db, user_id)
@@ -33,48 +33,64 @@ class HomeService:
         nx = user.grid_nx or 60 
         ny = user.grid_ny or 127
 
-        # 2. 시간 설정 (KST 강제 적용)
+        # 2. 시간 설정
         kst = pytz.timezone('Asia/Seoul')
         now = datetime.now(kst)
-        # [Target Time] 현재 시간 + 1시간 (분/초 0으로 초기화)
-        target_time = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         
-        # 오늘 하루 전체 범위 (00:00 ~ 23:59)
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end = now.replace(hour=23, minute=59, second=59)
+        # [Target Time] 현재 시간 + 1시간 (분/초 0으로 초기화)
+        target_time_aware = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        
+        # [핵심 수정 1] 비교를 위해 타임존 정보 제거 (Naive Time)
+        # DB에 저장된 날씨 데이터가 Timezone 정보가 없을 확률이 높으므로 포맷 통일
+        target_time_naive = target_time_aware.replace(tzinfo=None)
 
-        # 3. 데이터 조회 (오늘 전체 데이터 한 번에 조회)
+        # 조회 범위 설정 (오늘 00:00 ~ 오늘 23:59)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+        query_end = now.replace(hour=23, minute=59, second=59).replace(tzinfo=None)
+
+        # [수정 2] 밤 23시 요청 대응: Target Time이 내일 00시라면 조회 범위 확장
+        if target_time_naive > query_end:
+            query_end = target_time_naive
+
+        # 3. 데이터 조회
+        # DB의 date 컬럼과 비교하기 위해 타임존 없는 변수 사용 권장
         daily_query = select(Weather).where(
             Weather.nx == nx,
             Weather.ny == ny,
             Weather.date >= today_start,
-            Weather.date <= today_end
+            Weather.date <= query_end
         ).order_by(Weather.date.asc())
+        
         daily_result = await db.execute(daily_query)
         daily_weather_list = daily_result.scalars().all()
 
         if not daily_weather_list:
             return self._get_empty_response(address)
 
-        # Target Time에 해당하는 날씨 데이터 찾기
-        target_weather = next((w for w in daily_weather_list if w.date == target_time), None)
+        # 4. Target Weather 찾기 (타임존 무시 비교)
+        target_weather = None
+        for w in daily_weather_list:
+            # DB 데이터(w.date)도 혹시 모르니 타임존 제거 후 비교
+            w_date_naive = w.date.replace(tzinfo=None) if w.date.tzinfo else w.date
+            
+            if w_date_naive == target_time_naive:
+                target_weather = w
+                break
 
-
-        # 4. 곰팡이 위험도 계산 (Max, Min, Current)
+        # 5. 곰팡이 위험도 계산 (Max, Min, Current)
         daily_max_item = None
         daily_min_item = None
         current_target_item = None
-        last_item = None # 예보가 끊겼을 때를 대비한 마지막 아이템
-
-        # 사용자 실내 데이터
+        
         t_in = user.indoor_temp
         h_in = user.indoor_humidity
 
+        # "오늘" 날짜 기준 (내일 00시 데이터는 통계에서 제외하고 Current용으로만 씀)
+        today_day = now.day
+
         for w in daily_weather_list:
-            # 윈도우 호환성: f-string 사용
             time_str = f"{w.date.hour:02d}:00"
             
-            # 위험도 계산
             risk_res = calculate_mold_risk(
                 t_out=w.temp,
                 rh_out=w.humid,
@@ -84,7 +100,6 @@ class HomeService:
                 rh_in_real=h_in
             )
 
-            # 아이템 생성
             item = MoldRiskItem(
                 time=time_str,
                 score=risk_res.get("score", 0.0),
@@ -96,20 +111,20 @@ class HomeService:
                 humid_used=risk_res["details"].get("h_in", 0.0)
             )
 
-            # Max/Min 갱신
-            if daily_max_item is None or item.score > daily_max_item.score:
-                daily_max_item = item
-            
-            if daily_min_item is None or item.score < daily_min_item.score:
-                daily_min_item = item
+            w_date_naive = w.date.replace(tzinfo=None) if w.date.tzinfo else w.date
 
-            # Current (Target Time) 찾기
-            if w.date == target_time:
+            # Max/Min은 '오늘 날짜' 데이터 중에서만 갱신
+            if w_date_naive.day == today_day:
+                if daily_max_item is None or item.score > daily_max_item.score:
+                    daily_max_item = item
+                if daily_min_item is None or item.score < daily_min_item.score:
+                    daily_min_item = item
+
+            # [핵심 수정 3] Current Item 찾기 (타임존 무시 비교)
+            if w_date_naive == target_time_naive:
                 current_target_item = item
-            
-            last_item = item
 
-        # 최종 리스트 조립 (MAX, MIN, CURRENT)
+        # 최종 리스트 조립
         final_risk_list = []
         
         if daily_max_item:
@@ -124,19 +139,26 @@ class HomeService:
             m.message = f"오늘 최소 위험 ({m.time})"
             final_risk_list.append(m)
             
+        # [요청사항] 맨 마지막은 현재 곰팡이 위험도
         if current_target_item:
             m = current_target_item.model_copy()
             m.type = "CURRENT"
+            # 메시지가 없다면 기본 상태 메시지 사용
+            if not m.message:
+                m.message = f"현재 상태: {m.status}"
             final_risk_list.append(m)
-        elif last_item:
-            # Target Time 데이터가 없으면 마지막 데이터 사용
-            m = last_item.model_copy()
-            m.type = "CURRENT"
-            m.message = "금일 예보 종료"
-            final_risk_list.append(m)
+        else:
+            # 데이터가 끊겨서 현재 시간을 못 찾은 경우 (예외 처리)
+            # 마지막 데이터를 가져오거나 빈 객체라도 반환
+            fallback_item = MoldRiskItem(
+                time=target_time_naive.strftime("%H:00"),
+                score=0, level="SAFE", status="데이터 없음", type="CURRENT",
+                message="현재 날씨 정보를 불러올 수 없습니다."
+            )
+            final_risk_list.append(fallback_item)
 
 
-        # 5. 날씨 정보 (Target Time 기준 1개만)
+        # 6. 날씨 정보 (Target Time 기준 1개)
         weather_details = []
         if target_weather:
             cond = "쾌적"
@@ -151,8 +173,9 @@ class HomeService:
                 condition=cond
             ))
 
-        # 6. 환기 정보 (최적의 시간 1개만 선정)
-        ventilation_recs = self._calculate_best_ventilation(daily_weather_list)
+        # 7. 환기 정보
+        # [수정 4] 현재 시간(now) 이후 데이터만 필터링하도록 수정
+        ventilation_recs = self._calculate_best_ventilation(daily_weather_list, now)
 
         return HomeResponse(
             region_address=address,
@@ -169,17 +192,20 @@ class HomeService:
             risk_forecast=[]
         )
 
-    def _calculate_best_ventilation(self, weather_data: list) -> list[VentilationTime]:
-        """
-        [요구사항]
-        1. 강수확률 0% (비 절대 안 옴)
-        2. 습도 60% 이하
-        3. 시간 넉넉하고 습도 낮은 '최고의 시간' 하나만 반환
-        """
+    def _calculate_best_ventilation(self, weather_data: list, now: datetime) -> list[VentilationTime]:
         candidates = [] 
         current_streak = []
+        
+        # 비교를 위해 now도 naive로 변환
+        now_naive = now.replace(tzinfo=None) if now.tzinfo else now
 
         for w in weather_data:
+            w_date_naive = w.date.replace(tzinfo=None) if w.date.tzinfo else w.date
+            
+            # 현재 시간 이후만 추천 대상
+            if w_date_naive <= now_naive:
+                continue
+
             if (-5 <= w.temp <= 28) and (w.humid <= 60) and (w.rain_prob == 0):
                 current_streak.append(w)
             else:
@@ -193,7 +219,6 @@ class HomeService:
         if not candidates:
             return [] 
 
-        # [정렬 기준] 1.지속시간(긴 순) 2.평균습도(낮은 순)
         best_streak = sorted(
             candidates, 
             key=lambda s: (-len(s), sum(w.humid for w in s) / len(s))
