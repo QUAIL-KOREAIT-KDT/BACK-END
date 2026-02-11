@@ -4,16 +4,12 @@ from datetime import datetime, timedelta
 import pytz
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-import logging
-
 from app.domains.user.repository import UserRepository
 from app.domains.home.models import Weather
 from app.domains.home.utils import calculate_mold_risk
 from app.domains.home.schemas import (
     HomeResponse, WeatherDetail, VentilationTime, MoldRiskItem
 )
-
-logger = logging.getLogger(__name__)
 
 class HomeService:
     def __init__(self):

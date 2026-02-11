@@ -53,11 +53,6 @@ async def fetch_daily_weather_job():
             client = WeatherClient()
             kst = pytz.timezone('Asia/Seoul')
             now = datetime.now(kst)
-            
-            # API 요청 기준 시각 (어제 23시 예보를 조회하여 오늘 00~24시 커버)
-            # 단, 안전하게 오늘 00시 기준 BaseTime 사용
-            base_date = now.strftime("%Y%m%d")
-            base_time = "0200" # 02시 예보부터 안정적으로 조회 (혹은 전날 23시)
 
             total_inserted = 0
 

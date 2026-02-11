@@ -3,7 +3,11 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.sql import func
 from app.core.database import Base
+from datetime import datetime
+import pytz
 
+def get_now_kst():
+    return datetime.now(pytz.timezone('Asia/Seoul'))
 
 class Notification(Base):
     """
@@ -38,7 +42,7 @@ class Notification(Base):
     is_sent = Column(Boolean, default=False)
 
     # 생성일
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), default=get_now_kst)
 
     # 읽은 시간
     read_at = Column(DateTime(timezone=True), nullable=True)

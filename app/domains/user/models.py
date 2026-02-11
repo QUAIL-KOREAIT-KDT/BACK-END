@@ -3,6 +3,11 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, BOOLEAN
 from sqlalchemy.sql import func
 from app.core.database import Base
+from datetime import datetime
+import pytz
+
+def get_now_kst():
+    return datetime.now(pytz.timezone('Asia/Seoul'))
 
 class User(Base):
     __tablename__ = "users"
@@ -48,6 +53,6 @@ class User(Base):
     # ====================================
 
     # 가입일
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=get_now_kst)
 
     
