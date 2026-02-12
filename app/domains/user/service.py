@@ -7,7 +7,7 @@ from app.domains.user.repository import UserRepository
 from app.utils.location import get_lat_lon_from_address, map_to_grid, find_nearest_city
 from datetime import datetime, timedelta
 from sqlalchemy import select, delete, and_
-from app.domains.diagnosis.models import MoldRisk
+from app.domains.diagnosis.models import MoldRisk, Diagnosis
 from app.domains.home.models import Weather
 from app.domains.home.client import WeatherClient
 from app.domains.home.utils import calculate_mold_risk
@@ -20,7 +20,11 @@ class UserService:
         self.repo = UserRepository()
         
     async def withdraw_user(self, db: AsyncSession, user_id: int):
-        """회원 탈퇴"""
+        """회원 탈퇴 - 관련 데이터 모두 삭제 후 유저 삭제"""
+        # diagnosis 테이블은 FK 제약 없으므로 수동 삭제
+        await db.execute(delete(Diagnosis).where(Diagnosis.user_id == user_id))
+
+        # mold_risks, notifications는 User 모델의 cascade로 자동 삭제됨
         is_deleted = await self.repo.delete_user(db, user_id)
         if not is_deleted:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")

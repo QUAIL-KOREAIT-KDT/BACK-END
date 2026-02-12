@@ -1,7 +1,7 @@
 # BACK-END/app/domains/users/models.py
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, BOOLEAN
-from sqlalchemy.sql import func
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 from datetime import datetime
 import pytz
@@ -54,5 +54,9 @@ class User(Base):
 
     # 가입일
     created_at = Column(DateTime(timezone=True), default=get_now_kst)
+
+    # 관계 설정 (회원 탈퇴 시 연관 데이터 자동 삭제)
+    mold_risks = relationship("MoldRisk", cascade="all, delete-orphan", passive_deletes=True)
+    notifications = relationship("Notification", cascade="all, delete-orphan", passive_deletes=True)
 
     
