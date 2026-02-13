@@ -159,22 +159,22 @@ def calculate_mold_risk(
     # 기본값
     level = "SAFE"
     title = "안전"
-    msg = "곰팡이 포자가 활동할 수 없는 쾌적한 환경입니다."
+    msg = "곰팡이 포자가 활동하기 힘든 쾌적한 환경입니다."
 
     if is_condensation: # 100% 초과 (결로)
-        level = "DANGER"
+        level = "DEAD"
         title = "💦 결로 발생 (매우 위험)"
-        msg = "벽이 젖었습니다! 방치하면 48시간 내 곰팡이가 번식합니다."
+        msg = "방치하면 48시간 내 곰팡이가 번식합니다."
         
     elif final_score >= 80: # 80~100%
         level = "DANGER"
         title = "🍄 곰팡이 활성 경고"
-        msg = "벽지가 눅눅합니다. 숨어있던 곰팡이 포자가 뿌리를 내리고 있습니다."
+        msg = "숨어있던 곰팡이 포자가 활동을 시작합니다."
         
     elif final_score >= 60: # 60~80%
         level = "WARNING"
         title = "💧 습기 주의"
-        msg = "벽 표면이 차갑습니다. 환기하지 않으면 결로가 생깁니다."
+        msg = "습기가 많아지고 있습니다. 주의가 필요합니다."
 
     return {
         "score": round(final_score, 1),
