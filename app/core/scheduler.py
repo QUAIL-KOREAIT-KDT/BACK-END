@@ -16,7 +16,6 @@ import pytz
 logger = logging.getLogger(__name__)
 
 # [설정] 대한민국 주요 12개 지역 좌표 (nx, ny)
-# 서울, 부산, 인천, 대구, 대전, 광주, 수원, 울산, 창원, 고양, 용인, 제주
 TARGET_REGIONS = [
     (60, 127),  # 서울
     (55, 124),  # 인천
@@ -57,9 +56,9 @@ def calculate_dew_point(temp, humid):
 async def fetch_daily_weather_job():
     """
     [매일 00:00 KST 실행]
-    1. 기존 날씨 데이터 전체 삭제
-    2. 12개 지역에 대해 오늘 01:00 ~ 내일 00:00 데이터 수집 및 저장
-    3. 온도/습도는 소수점 첫째 자리 반올림
+    1. 기존 날씨 데이터 삭제
+    2. 12개 지역 데이터 수집 (누락 시 최대 3회 재시도)
+    3. 저장
     """
     logger.info("🌤️ [Scheduler] 일일 날씨 데이터 갱신 시작 (12개 지역)")
     
@@ -74,76 +73,106 @@ async def fetch_daily_weather_job():
             kst = pytz.timezone('Asia/Seoul')
             now = datetime.now(kst)
 
+            # [핵심] 수집해야 할 잔여 지역 리스트 (처음엔 전체 12개)
+            # 리스트 복사(copy)하여 사용
+            remaining_regions = list(TARGET_REGIONS)
+            max_retries = 3  # 최대 3번 시도
             total_inserted = 0
 
-            for nx, ny in TARGET_REGIONS:
-                # 외부 API 호출
-                items = await client.fetch_forecast(nx, ny) 
-                if not items:
-                    continue
-
-                grouped_data = {}
-                # 데이터 파싱
-                for item in items:
-                    cat = item['category']
-                    if cat not in ['TMP', 'REH', 'POP']: continue
-                    
-                    # 날짜/시간 키 생성
-                    fcst_date = item['fcstDate']
-                    fcst_time = item['fcstTime']
-                    key = f"{fcst_date}{fcst_time}"
-                    
-                    if key not in grouped_data: grouped_data[key] = {}
-                    grouped_data[key][cat] = float(item['fcstValue'])
-
-                # DB 객체 생성
-                new_objs = []
-                for key, vals in grouped_data.items():
-                    if 'TMP' in vals and 'REH' in vals and 'POP' in vals:
-                        dt = datetime.strptime(key, "%Y%m%d%H%M")
+            # 최대 3회 반복 (Retry Logic)
+            for attempt in range(max_retries):
+                # 더 이상 수집할 지역이 없으면 중단
+                if not remaining_regions:
+                    break
+                
+                logger.info(f"🔄 [Try {attempt+1}/{max_retries}] 남은 지역 {len(remaining_regions)}개 수집 시도...")
+                
+                # 이번 턴에 실패한 지역을 담을 리스트
+                failed_regions = []
+                
+                for nx, ny in remaining_regions:
+                    try:
+                        # 외부 API 호출
+                        items = await client.fetch_forecast(nx, ny)
                         
-                        # [필터링] 오늘 01:00 ~ 내일 00:00 데이터만 저장
-                        # (단, API가 보통 3일치 주므로 날짜 필터링 필수)
-                        
-                        # 타겟 범위 설정
+                        # 아이템이 비어있으면(실패) -> 실패 목록에 추가하고 넘어감
+                        if not items:
+                            failed_regions.append((nx, ny))
+                            continue
+
+                        # --- 데이터 처리 로직 (기존과 동일) ---
+                        grouped_data = {}
+                        for item in items:
+                            cat = item['category']
+                            if cat not in ['TMP', 'REH', 'POP']: continue
+                            
+                            key = f"{item['fcstDate']}{item['fcstTime']}"
+                            if key not in grouped_data: grouped_data[key] = {}
+                            grouped_data[key][cat] = float(item['fcstValue'])
+
+                        new_objs = []
                         target_start = now.replace(hour=1, minute=0, second=0, microsecond=0)
-                        target_end = target_start + timedelta(days=1) # 내일 01:00 전까지 -> 즉 내일 00:00 포함
+                        target_end = target_start + timedelta(days=1)
                         
-                        # timezone info 제거 후 비교 (API 데이터는 naive)
-                        dt_naive = dt.replace(tzinfo=None)
-                        start_naive = target_start.replace(tzinfo=None)
-                        # 내일 00:00까지만 (다음날 00:00 = 오늘 24:00)
-                        end_naive = (start_naive + timedelta(hours=23)).replace(minute=59)
+                        dt_naive_start = target_start.replace(tzinfo=None)
+                        dt_naive_end = (dt_naive_start + timedelta(hours=23)).replace(minute=59)
 
-                        if start_naive <= dt_naive <= end_naive + timedelta(minutes=1):
-                            # [요구사항] 소수점 첫째 자리 반올림
-                            temp = round(vals['TMP'], 1)
-                            humid = round(vals['REH'], 1)
-                            dew = calculate_dew_point(temp, humid)
+                        for key, vals in grouped_data.items():
+                            if 'TMP' in vals and 'REH' in vals and 'POP' in vals:
+                                dt = datetime.strptime(key, "%Y%m%d%H%M")
+                                dt_naive = dt.replace(tzinfo=None)
 
-                            new_objs.append(Weather(
-                                date=dt,
-                                nx=nx,
-                                ny=ny,
-                                temp=temp,
-                                humid=humid,
-                                rain_prob=int(vals['POP']),
-                                dew_point=dew
-                            ))
+                                if dt_naive_start <= dt_naive <= dt_naive_end + timedelta(minutes=1):
+                                    temp = round(vals['TMP'], 1)
+                                    humid = round(vals['REH'], 1)
+                                    dew = calculate_dew_point(temp, humid)
 
-                if new_objs:
-                    db.add_all(new_objs)
-                    total_inserted += len(new_objs)
+                                    new_objs.append(Weather(
+                                        date=dt,
+                                        nx=nx,
+                                        ny=ny,
+                                        temp=temp,
+                                        humid=humid,
+                                        rain_prob=int(vals['POP']),
+                                        dew_point=dew
+                                    ))
 
-            await db.commit()
-            logger.info(f"✅ [Scheduler] 총 {total_inserted}개 날씨 데이터 저장 완료")
-            
-            # (옵션) 데이터가 갱신되었으니 위험도 분석 등의 후속 작업 실행 가능
-            # await calculate_daily_risk_job() 
+                        if new_objs:
+                            db.add_all(new_objs)
+                            total_inserted += len(new_objs)
+                        else:
+                            # 데이터는 왔는데 필터링 결과가 없는 경우도(드물지만) 성공으로 간주할지, 
+                            # 혹은 실패로 볼지 결정 필요. 보통 API가 정상이면 성공으로 처리.
+                            pass 
+
+                    except Exception as e:
+                        logger.warning(f"⚠️ 지역({nx}, {ny}) 처리 중 에러: {e}")
+                        failed_regions.append((nx, ny))
+                
+                # [중요] DB에 중간 저장 (혹은 루프 다 끝나고 한 번에 해도 됨)
+                await db.commit()
+                
+                # 남은 지역 목록 업데이트
+                remaining_regions = failed_regions
+                
+                # 실패한 지역이 남아있다면 잠시 대기 후 재시도
+                if remaining_regions:
+                    wait_sec = 5  # 5초 대기
+                    logger.info(f"⏳ {len(remaining_regions)}개 지역 실패. {wait_sec}초 후 재시도합니다.")
+                    await asyncio.sleep(wait_sec)
+
+            # 최종 결과 로깅
+            if not remaining_regions:
+                logger.info(f"✅ [Scheduler] 전체 {len(TARGET_REGIONS)}개 지역 수집 성공! (총 {total_inserted}행)")
+            else:
+                logger.error(f"❌ [Scheduler] 최종 실패 지역 발생: {remaining_regions}")
+
+            # (옵션) 후속 작업 실행
+            # await calculate_daily_risk_job()
 
         except Exception as e:
             await db.rollback()
-            logger.error(f"❌ [Scheduler] 날씨 갱신 실패: {e}")
+            logger.error(f"❌ [Scheduler] 치명적 오류 발생: {e}")
 
 # [Task 2] 곰팡이 위험도 계산 Job (여기가 핵심 변경!)
 async def calculate_daily_risk_job():
