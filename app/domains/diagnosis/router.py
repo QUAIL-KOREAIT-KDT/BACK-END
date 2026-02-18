@@ -23,6 +23,7 @@ class MoldLocation(str, PyEnum):
     LIVING_ROOM = "living_room"
     SINK = "sink"
     TOILET = "toilet"
+    OTHER = "other"
     
 @router.post("/predict", response_model=DiagnosisResponse)
 async def predict_mold(
