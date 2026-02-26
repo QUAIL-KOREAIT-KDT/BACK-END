@@ -59,4 +59,6 @@ class User(Base):
     mold_risks = relationship("MoldRisk", cascade="all, delete-orphan", passive_deletes=True)
     notifications = relationship("Notification", cascade="all, delete-orphan", passive_deletes=True)
 
-    
+    # ✅ refresh 토큰(해시) + 만료시각
+    refresh_token_hash = Column(String(64), nullable=True)  # sha256 hex = 64
+    refresh_token_expires_at = Column(DateTime(timezone=True), nullable=True)

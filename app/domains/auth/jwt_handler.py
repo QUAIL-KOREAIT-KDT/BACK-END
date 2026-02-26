@@ -6,6 +6,8 @@ from fastapi import Depends, HTTPException, status
 # [수정 1] OAuth2PasswordBearer 대신 HTTPBearer, HTTPAuthorizationCredentials 임포트
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
+import secrets
+import hashlib
 
 # OAuth2PasswordBearer 대신 HTTPBearer 사용
 security = HTTPBearer()  # (단순 토큰 입력창 생성)
@@ -17,6 +19,16 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+#  refresh 토큰 생성(랜덤 문자열)
+def create_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+#  refresh 토큰 해시(서버 SECRET 섞어서)
+def hash_refresh_token(refresh_token: str) -> str:
+    raw = (refresh_token + settings.SECRET_KEY).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
 
 # 토큰 검증 및 아이디 불러오기
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
