@@ -166,15 +166,20 @@ def calculate_mold_risk(
         title = "💦 결로 발생 (매우 위험)"
         msg = "방치하면 48시간 내 곰팡이가 번식합니다."
         
-    elif final_score >= 80: # 80~100%
+    elif final_score > 90: # 91~100%
         level = "DANGER"
         title = "🍄 곰팡이 활성 경고"
         msg = "숨어있던 곰팡이 포자가 활동을 시작합니다."
         
-    elif final_score >= 60: # 60~80%
+    elif final_score > 60: # 61~90%
         level = "WARNING"
         title = "💧 습기 주의"
         msg = "습기가 많아지고 있습니다. 주의가 필요합니다."
+
+    elif final_score > 30: # 31~60%
+        level = "CAUTION"
+        title = "⚠️ 주의"
+        msg = "환기를 통해 습기를 낮춰주세요."
 
     return {
         "score": round(final_score, 1),

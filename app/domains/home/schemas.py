@@ -20,7 +20,7 @@ class VentilationTime(BaseModel):
 class MoldRiskItem(BaseModel):
     time: str          # "13:00" (해당 예보 시간)
     score: float       # 0.0 ~ 100.0
-    level: str         # "SAFE", "WARNING", "DANGER"
+    level: str         # "SAFE", "CAUTION", "WARNING", "DANGER", "DEAD"
     type: str          # "MAX" (최대), "MIN" (최소), "CURRENT" (현재예보)
     message: str       # 사용자 안내 메시지 (간략)
     
