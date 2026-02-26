@@ -1,14 +1,19 @@
 # BACK-END/app/domains/auth/router.py
-
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 # [중요] DB 세션과 진짜 유저 서비스를 가져옵니다.
 from app.core.database import get_db
 from app.domains.user.service import UserService 
 from app.domains.auth.kakao_client import KakaoClient
-from app.domains.auth.jwt_handler import create_access_token
-from app.domains.auth.schemas import KakaoLoginRequest, AuthResponse
+from app.domains.auth.jwt_handler import (create_access_token, create_refresh_token,hash_refresh_token,)
+from app.domains.auth.schemas import KakaoLoginRequest, AuthResponse, RefreshRequest
+from app.domains.auth.jwt_handler import verify_token
+from app.domains.user.models import User
+from app.core.config import settings
+
 
 router = APIRouter()
 
@@ -39,9 +44,19 @@ async def kakao_login(token: KakaoLoginRequest, db: AsyncSession = Depends(get_d
         # 3. [JWT] 우리 서버 전용 토큰 발급
         access_token = create_access_token(data={"sub": str(user.id)})
         
+        # refresh 발급 + DB 저장(해시만)
+        refresh_token = create_refresh_token()
+        user.refresh_token_hash = hash_refresh_token(refresh_token)
+        user.refresh_token_expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
         # 4. [성공 응답]
         return {
             "access_token": access_token,
+            "refresh_token": user.refresh_token_hash,
+            "refresh_token_expires_at":user.refresh_token_expires_at,
             "token_type": "bearer",
             "user_id": user.id,
             "is_new_user": is_new_user, # user_service 로직에 따라 True/False 분기 필요
@@ -56,6 +71,58 @@ async def kakao_login(token: KakaoLoginRequest, db: AsyncSession = Depends(get_d
             detail="로그인 처리에 실패했습니다. (카카오 토큰 만료 등)"
         )
 
+# ============================================================
+# refresh가 성공하면:
+#   새 refresh 발급(회전)
+#   만료를 now + 90일로 재설정(슬라이딩)
+# ============================================================
+@router.post("/refresh", response_model=AuthResponse)
+async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    token_hash = hash_refresh_token(payload.refresh_token)
+
+    result = await db.execute(select(User).where(User.refresh_token_hash == token_hash))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="refresh 토큰이 유효하지 않습니다.")
+
+    if not user.refresh_token_expires_at or user.refresh_token_expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="refresh 토큰이 만료되었습니다.")
+
+    # ✅ 새 access
+    new_access = create_access_token(data={"sub": str(user.id)})
+
+    # ✅ 회전 + 슬라이딩 (핵심)
+    new_refresh = create_refresh_token()
+    user.refresh_token_hash = hash_refresh_token(new_refresh)
+    user.refresh_token_expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "access_token": new_access,
+        "refresh_token": new_refresh,
+        "refresh_token_expires_at": user.refresh_token_expires_at,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "is_new_user": False,
+        "nickname": user.nickname,
+    }
+@router.post("/logout")
+async def logout(user_id: int = Depends(verify_token), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+
+    user.refresh_token_hash = None
+    user.refresh_token_expires_at = None
+    db.add(user)
+    await db.commit()
+
+    return {"ok": True}
 
 # ============================================================
 # 개발용 로그인 API - 에뮬레이터/테스트 환경에서 카카오 로그인 없이 토큰 발급
@@ -79,8 +146,20 @@ async def dev_login(db: AsyncSession = Depends(get_db)):
         
         print(f"[DEV LOGIN] 개발용 로그인 성공 - userId: {user.id}")
         
+
+        # ✅ 회전 + 슬라이딩 (핵심)
+        new_refresh = create_refresh_token()
+        user.refresh_token_hash = hash_refresh_token(new_refresh)
+        user.refresh_token_expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
         return {
             "access_token": access_token,
+            "refresh_token": new_refresh,
+            "refresh_token_expires_at":user.refresh_token_expires_at,
             "token_type": "bearer",
             "user_id": user.id,
             "is_new_user": is_new_user,
@@ -93,3 +172,4 @@ async def dev_login(db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"개발용 로그인 실패: {str(e)}"
         )
+    
