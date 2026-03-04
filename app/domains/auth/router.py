@@ -55,7 +55,7 @@ async def kakao_login(token: KakaoLoginRequest, db: AsyncSession = Depends(get_d
         # 4. [성공 응답]
         return {
             "access_token": access_token,
-            "refresh_token": user.refresh_token_hash,
+            "refresh_token": refresh_token,
             "refresh_token_expires_at":user.refresh_token_expires_at,
             "token_type": "bearer",
             "user_id": user.id,

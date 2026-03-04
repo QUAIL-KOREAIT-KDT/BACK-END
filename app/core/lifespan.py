@@ -10,6 +10,7 @@ from app.domains.home.models import Weather
 from app.domains.diagnosis.models import Diagnosis
 from app.domains.dictionary.models import Dictionary
 from app.domains.notification.models import Notification  # 알림 테이블
+from app.domains.fortune.models import FortuneHistory     # 운세 이력 테이블
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.scheduler import fetch_daily_weather_job, calculate_daily_risk_job, send_morning_notification_job, initialize_weather_data

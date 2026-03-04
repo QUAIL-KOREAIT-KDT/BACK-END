@@ -58,6 +58,7 @@ class User(Base):
     # 관계 설정 (회원 탈퇴 시 연관 데이터 자동 삭제)
     mold_risks = relationship("MoldRisk", cascade="all, delete-orphan", passive_deletes=True)
     notifications = relationship("Notification", cascade="all, delete-orphan", passive_deletes=True)
+    game_score = relationship("GameScore", cascade="all, delete-orphan", passive_deletes=True, uselist=False)
 
     # ✅ refresh 토큰(해시) + 만료시각
     refresh_token_hash = Column(String(64), nullable=True)  # sha256 hex = 64
