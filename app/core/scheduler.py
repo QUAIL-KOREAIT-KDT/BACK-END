@@ -13,6 +13,9 @@ from app.domains.home.utils import calculate_mold_risk
 import logging
 import pytz
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+scheduler = AsyncIOScheduler()
 logger = logging.getLogger(__name__)
 
 # [설정] 대한민국 주요 12개 지역 좌표 (nx, ny)
@@ -53,59 +56,47 @@ def calculate_dew_point(temp, humid):
 # ====================================================
 # [Task 1] 00:00 - 날씨 수집 및 '이슬점 계산' 저장
 # ====================================================
-async def fetch_daily_weather_job():
+async def fetch_daily_weather_job(target_regions=None, is_delayed_retry=False, delay_attempt=1):
     """
-    [매일 00:00 KST 실행]
-    1. 기존 날씨 데이터 삭제
-    2. 12개 지역 데이터 수집 (누락 시 최대 3회 재시도)
-    3. 저장
+    1. 정규 실행(00:00): 기존 데이터 삭제 후 12개 지역 수집
+    2. 지연 실행: 기존 데이터 유지, 실패했던 지역만 다시 수집
     """
-    logger.info("🌤️ [Scheduler] 일일 날씨 데이터 갱신 시작 (12개 지역)")
+    regions_to_fetch = target_regions if target_regions is not None else TARGET_REGIONS
+    logger.info(f"🌤️ [Scheduler] 날씨 데이터 수집 시작 (대상: {len(regions_to_fetch)}개 지역, 지연재시도: {is_delayed_retry})")
     
     async with AsyncSessionLocal() as db:
         try:
-            # 1. 기존 데이터 전체 삭제 (Reset)
-            await db.execute(delete(Weather))
-            await db.commit()
-            logger.info("🗑️ [Scheduler] 기존 날씨 데이터 초기화 완료")
+            # 정규 첫 실행일 때만 기존 데이터 초기화 (지연 재시도 시에는 덮어쓰거나 추가만 함)
+            if not is_delayed_retry:
+                await db.execute(delete(Weather))
+                await db.commit()
+                logger.info("🗑️ [Scheduler] 기존 날씨 데이터 초기화 완료")
 
             client = WeatherClient()
             kst = pytz.timezone('Asia/Seoul')
             now = datetime.now(kst)
 
-            # [핵심] 수집해야 할 잔여 지역 리스트 (처음엔 전체 12개)
-            # 리스트 복사(copy)하여 사용
-            remaining_regions = list(TARGET_REGIONS)
-            max_retries = 3  # 최대 3번 시도
+            remaining_regions = list(regions_to_fetch)
+            max_retries = 3
             total_inserted = 0
 
-            # 최대 3회 반복 (Retry Logic)
+            # 3번의 즉각 재시도 로직
             for attempt in range(max_retries):
-                # 더 이상 수집할 지역이 없으면 중단
-                if not remaining_regions:
-                    break
-                
+                if not remaining_regions: break
                 logger.info(f"🔄 [Try {attempt+1}/{max_retries}] 남은 지역 {len(remaining_regions)}개 수집 시도...")
-                
-                # 이번 턴에 실패한 지역을 담을 리스트
                 failed_regions = []
                 
                 for nx, ny in remaining_regions:
                     try:
-                        # 외부 API 호출
                         items = await client.fetch_forecast(nx, ny)
-                        
-                        # 아이템이 비어있으면(실패) -> 실패 목록에 추가하고 넘어감
                         if not items:
                             failed_regions.append((nx, ny))
                             continue
 
-                        # --- 데이터 처리 로직 (기존과 동일) ---
                         grouped_data = {}
                         for item in items:
                             cat = item['category']
                             if cat not in ['TMP', 'REH', 'POP']: continue
-                            
                             key = f"{item['fcstDate']}{item['fcstTime']}"
                             if key not in grouped_data: grouped_data[key] = {}
                             grouped_data[key][cat] = float(item['fcstValue'])
@@ -113,7 +104,6 @@ async def fetch_daily_weather_job():
                         new_objs = []
                         target_start = now.replace(hour=1, minute=0, second=0, microsecond=0)
                         target_end = target_start + timedelta(days=1)
-                        
                         dt_naive_start = target_start.replace(tzinfo=None)
                         dt_naive_end = (dt_naive_start + timedelta(hours=23)).replace(minute=59)
 
@@ -128,47 +118,56 @@ async def fetch_daily_weather_job():
                                     dew = calculate_dew_point(temp, humid)
 
                                     new_objs.append(Weather(
-                                        date=dt,
-                                        nx=nx,
-                                        ny=ny,
-                                        temp=temp,
-                                        humid=humid,
-                                        rain_prob=int(vals['POP']),
-                                        dew_point=dew
+                                        date=dt, nx=nx, ny=ny,
+                                        temp=temp, humid=humid, rain_prob=int(vals['POP']), dew_point=dew
                                     ))
 
                         if new_objs:
                             db.add_all(new_objs)
                             total_inserted += len(new_objs)
-                        else:
-                            # 데이터는 왔는데 필터링 결과가 없는 경우도(드물지만) 성공으로 간주할지, 
-                            # 혹은 실패로 볼지 결정 필요. 보통 API가 정상이면 성공으로 처리.
-                            pass 
 
                     except Exception as e:
                         logger.warning(f"⚠️ 지역({nx}, {ny}) 처리 중 에러: {e}")
                         failed_regions.append((nx, ny))
                 
-                # [중요] DB에 중간 저장 (혹은 루프 다 끝나고 한 번에 해도 됨)
                 await db.commit()
-                
-                # 남은 지역 목록 업데이트
                 remaining_regions = failed_regions
                 
-                # 실패한 지역이 남아있다면 잠시 대기 후 재시도
                 if remaining_regions:
-                    wait_sec = 5  # 5초 대기
-                    logger.info(f"⏳ {len(remaining_regions)}개 지역 실패. {wait_sec}초 후 재시도합니다.")
-                    await asyncio.sleep(wait_sec)
+                    await asyncio.sleep(5)
 
-            # 최종 결과 로깅
+            # [핵심] 즉각 3회 재시도까지 모두 끝난 후의 결과 평가
             if not remaining_regions:
-                logger.info(f"✅ [Scheduler] 전체 {len(TARGET_REGIONS)}개 지역 수집 성공! (총 {total_inserted}행)")
+                logger.info(f"✅ [Scheduler] 대상 지역 수집 모두 성공! (총 {total_inserted}행 추가됨)")
+                
+                # 만약 지연 재시도로 누락되었던 데이터를 채워 넣은 것이라면,
+                # 곰팡이 위험도를 최신화하기 위해 다시 한번 계산을 돌려줍니다.
+                if is_delayed_retry:
+                    logger.info("♻️ 지연 데이터 수집 완료로 인해 위험도 재계산을 트리거합니다.")
+                    await calculate_daily_risk_job()
             else:
-                logger.error(f"❌ [Scheduler] 최종 실패 지역 발생: {remaining_regions}")
-
-            # (옵션) 후속 작업 실행
-            # await calculate_daily_risk_job()
+                logger.error(f"❌ [Scheduler] 즉각 재시도 3회 마저 실패한 지역: {remaining_regions}")
+                
+                # 최대 2회까지만 지연 재시도 (예: 1시간 뒤, 2시간 뒤)
+                max_delay_attempts = 2
+                
+                if delay_attempt <= max_delay_attempts:
+                    # 1시간 뒤로 실행 시간 예약
+                    run_time = datetime.now() + timedelta(hours=1)
+                    job_id = f"delayed_weather_retry_{now.timestamp()}"
+                    
+                    logger.info(f"⏳ [Scheduler] 1시간 뒤({run_time.strftime('%H:%M')})에 지연 재시도를 예약합니다. (시도 횟수: {delay_attempt}/{max_delay_attempts})")
+                    
+                    scheduler.add_job(
+                        fetch_daily_weather_job,     # 실행할 함수
+                        'date',                      # 특정 날짜/시간에 1회성 실행
+                        run_date=run_time,           # 실행 시간 (1시간 뒤)
+                        args=[remaining_regions, True, delay_attempt + 1], # 파라미터 전달
+                        id=job_id
+                    )
+                else:
+                    logger.error("🚨 [Scheduler] 지연 재시도 한계를 초과했습니다! 관리자의 확인이 필요합니다.")
+                    # TODO: 필요하다면 여기서 디스코드나 슬랙 웹훅으로 관리자에게 긴급 알림 발송
 
         except Exception as e:
             await db.rollback()

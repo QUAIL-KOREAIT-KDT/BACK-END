@@ -13,12 +13,17 @@ from app.domains.notification.models import Notification  # 알림 테이블
 from app.domains.fortune.models import FortuneHistory     # 운세 이력 테이블
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from app.core.scheduler import fetch_daily_weather_job, calculate_daily_risk_job, send_morning_notification_job, initialize_weather_data
+from app.core.scheduler import (
+    scheduler, 
+    fetch_daily_weather_job, 
+    calculate_daily_risk_job, 
+    send_morning_notification_job, 
+    initialize_weather_data
+)
 
 # 전역 객체 저장소
 ml_models = {}
 vector_db = {}
-scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
