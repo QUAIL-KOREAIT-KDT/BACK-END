@@ -1,0 +1,47 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: pangpang-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+      MYSQL_DATABASE: "quail_db"
+    ports:
+      - "3307:3306"
+    volumes:
+      - pangpang_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p1234 --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pangpang-api:dev
+    container_name: pangpang-api
+    restart: unless-stopped
+    env_file:
+      - .env.compose
+    depends_on:
+      db:
+        condition: service_healthy
+   
+  nginx:
+    image: nginx:alpine
+    container_name: pangpang-nginx
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot
+
+volumes:
+  pangpang_mysql_data:

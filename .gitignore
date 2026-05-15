@@ -64,3 +64,6 @@ secrets.py
 *.pth
 *.pt
 efficientnet_b0_mold_quantized.onnx
+
+.env.compose
+.env.docker

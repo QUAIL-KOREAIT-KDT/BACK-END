@@ -1,0 +1,9 @@
+venv
+.git
+__pycache__
+*.pyc
+*.log
+logs
+chroma_db
+nohup.out
+server.log
