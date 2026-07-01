@@ -1,5 +1,7 @@
 # BACK-END/app/main.py
 import logging  
+from typing import Optional
+from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
@@ -12,6 +14,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from app.core.logger import setup_logging
 from app.middleware import APIAccessLoggerMiddleware
 
+from app.core.config import settings
 from app.core.lifespan import lifespan
 
 # 라우터 임포트
@@ -26,18 +29,23 @@ from app.domains.my_page.router import router as my_page_router
 from app.domains.notification.router import router as notification_router
 from app.domains.iot.router import router as iot_router
 from app.domains.game.router import router as game_router
+from app.domains.system.router import router as system_router
 
 # jwt 토큰 검증 테스트
 from app.domains.auth.jwt_handler import verify_token
 
-security = HTTPBasic()
-# QUAIL 팀 전용 로그인 정보 설정
-ADMIN_USER = "quail_admin"
-ADMIN_PASSWORD = "pang_password_2026"
+security = HTTPBasic(auto_error=False)
 
-def get_current_username(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_username = compare_digest(credentials.username, ADMIN_USER)
-    correct_password = compare_digest(credentials.password, ADMIN_PASSWORD)
+def get_current_username(credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+    if (
+        credentials is None
+        or not settings.DOCS_BASIC_AUTH_USER
+        or not settings.DOCS_BASIC_AUTH_PASSWORD
+    ):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    correct_username = compare_digest(credentials.username, settings.DOCS_BASIC_AUTH_USER)
+    correct_password = compare_digest(credentials.password, settings.DOCS_BASIC_AUTH_PASSWORD)
     if not (correct_username and correct_password):
         raise HTTPException(
             status_code=401,
@@ -93,6 +101,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # public 라우터
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
+app.include_router(system_router, prefix="/api/system", tags=["System"])
 
 
 # private 라우터
@@ -112,6 +121,33 @@ app.include_router(game_router, prefix="/api/game", tags=["Game"], dependencies=
 def health_check():
     return {"status": "ok", "message": "QUAIL Server is Running~~!!"}
 # get post put delete 
+
+
+@app.get("/api/meta/compat", include_in_schema=False)
+def compatibility_manifest():
+    """Public compatibility manifest for staged app/backend releases."""
+    return {
+        "service": "pangpangpang-backend",
+        "compat_contract": "2026-07-01",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "released_app_defaults": {
+            "users_me": "/api/users/me",
+            "search_query": "/api/search/query",
+            "dev_login_enabled": settings.ALLOW_DEV_LOGIN,
+            "strict_rag_enabled": settings.ENABLE_STRICT_RAG,
+        },
+        "next_app_capabilities": {
+            "users_me_safe": "/api/users/me-safe",
+            "search_query_safe": "/api/search/query-safe",
+        },
+        "feature_flags": {
+            "ALLOW_DEV_LOGIN": settings.ALLOW_DEV_LOGIN,
+            "ENABLE_STRICT_RAG": settings.ENABLE_STRICT_RAG,
+            "ENABLE_SCHEDULER": settings.ENABLE_SCHEDULER,
+            "FETCH_WEATHER_ON_STARTUP": settings.FETCH_WEATHER_ON_STARTUP,
+        },
+        "compatibility_rule": "Existing endpoints remain compatible; next app may probe safe endpoints and fall back to existing endpoints.",
+    }
 
 
 # ==========================================================

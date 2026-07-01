@@ -29,7 +29,7 @@ class MyPageService:
         return None
     
 
-    async def delete_diagnosis_record(self, db, id: int):
+    async def delete_diagnosis_record(self, db, user_id: int, id: int):
         """진단 기록 삭제"""
-        result = await self.repo.delete_diagnosis_info(db, id)
+        result = await self.repo.delete_diagnosis_info(db, id, user_id)
         return result

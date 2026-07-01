@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     ALGORITHM: str 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 # 60분 설정
     REFRESH_TOKEN_EXPIRE_DAYS: int = 90
+    ALLOW_DEV_LOGIN: bool = False
+    ENABLE_SCHEDULER: bool = True
+    FETCH_WEATHER_ON_STARTUP: bool = True
+    DOCS_BASIC_AUTH_USER: str | None = None
+    DOCS_BASIC_AUTH_PASSWORD: str | None = None
+    ENABLE_STRICT_RAG: bool = False
 
     # 4. 선택적 설정 (기본값 None 허용)
     AWS_ACCESS_KEY_ID: str | None = None

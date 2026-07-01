@@ -134,6 +134,9 @@ async def dev_login(db: AsyncSession = Depends(get_db)):
     [개발 전용] 카카오 로그인 없이 테스트 계정으로 JWT 발급
     에뮬레이터나 테스트 환경에서 사용
     """
+    if not settings.ALLOW_DEV_LOGIN:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
     try:
         # 테스트용 카카오 ID (고정값)
         test_kakao_id = "dev_test_user_12345"

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.core.database import get_db
@@ -44,6 +44,10 @@ async def delete_diagnosis_record(
     db: AsyncSession = Depends(get_db)
 ):
     service = MyPageService(db)
-    await service.delete_diagnosis_record(db,id.id)
-    # 삭제 로직 구현 필요
-    return {"message": "삭제되었긔"}
+    deleted = await service.delete_diagnosis_record(db, user_id, id.id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="진단 기록을 찾을 수 없습니다.",
+        )
+    return {"message": "삭제되었습니다."}

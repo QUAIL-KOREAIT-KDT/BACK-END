@@ -1,10 +1,10 @@
 # BACK-END/app/domains/game/schemas.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class ScoreSubmit(BaseModel):
-    score: int
+    score: int = Field(ge=0, le=100000)
 
 class PersonalBestResponse(BaseModel):
     best_score: int

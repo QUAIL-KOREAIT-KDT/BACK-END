@@ -1,5 +1,6 @@
 # BACK-END/app/domains/home/client.py
 
+import asyncio
 import requests
 import json
 from datetime import datetime, timedelta
@@ -41,7 +42,12 @@ class WeatherClient:
 
         try:
             # 타임아웃 5초 설정 (서버 지연 방지)
-            response = requests.get(self.base_url, params=params, timeout=5)
+            response = await asyncio.to_thread(
+                requests.get,
+                self.base_url,
+                params=params,
+                timeout=5,
+            )
             
             if response.status_code != 200:
                 return []

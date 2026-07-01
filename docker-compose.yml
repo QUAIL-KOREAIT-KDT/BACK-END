@@ -25,6 +25,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env.compose
+    volumes:
+      # Keep secrets outside the Docker image. The env value
+      # FIREBASE_CREDENTIALS_PATH should point to /app/firebase-admin-key.json.
+      - ./firebase-admin-key.json:/app/firebase-admin-key.json:ro
     depends_on:
       db:
         condition: service_healthy

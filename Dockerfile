@@ -12,8 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 실제 코드 복사
 COPY app ./app
-COPY firebase-admin-key.json ./firebase-admin-key.json
-COPY .env ./.env
 COPY seed_dictionary.py /app/seed_dictionary.py
 
 

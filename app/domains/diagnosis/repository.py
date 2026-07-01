@@ -34,8 +34,11 @@ class DiagnosisRepository:
     # select * from Diagnosis where 컬럼user_id = 변수user_id and 컬럼id = 변수id
     
 
-    async def delete_diagnosis_info(self, db, id: int):
-        stmt = delete(Diagnosis).where(Diagnosis.id == id)
-        await db.execute(stmt)
+    async def delete_diagnosis_info(self, db, id: int, user_id: int):
+        stmt = delete(Diagnosis).where(
+            Diagnosis.id == id,
+            Diagnosis.user_id == user_id,
+        )
+        result = await db.execute(stmt)
         await db.commit()
-        return True
+        return result.rowcount > 0

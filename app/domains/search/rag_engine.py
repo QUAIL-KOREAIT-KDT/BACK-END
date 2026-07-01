@@ -53,11 +53,11 @@ class RAGEngine:
                 "target": mold_name,
                 "duration": f"{duration:.3f}s",
                 "input_context_preview": context_text[:200] + "..." if len(context_text) > 200 else context_text,
-                "output_response": response.text  # 제미나이가 뱉은 전체 답변
+                "output_length": len(response.text or "")
             }
             logger.info(json.dumps(success_log, ensure_ascii=False))
 
-            return response.text
+            return self._validate_response(response.text)
 
         except Exception as e:
             duration = time.time() - start_time
@@ -68,7 +68,7 @@ class RAGEngine:
                 "target": mold_name,
                 "duration": f"{duration:.3f}s",
                 "error_cause": str(e), # 구체적인 에러 메시지
-                "input_context": context_text # 실패 원인이 데이터 문제일 수 있으므로 기록
+                "input_context_preview": context_text[:200] + "..." if len(context_text) > 200 else context_text
             }
             logger.error(json.dumps(error_log, ensure_ascii=False), exc_info=True)
             
@@ -81,5 +81,25 @@ class RAGEngine:
                 "insight": "현재 상세 분석 서비스를 이용할 수 없습니다."
             }
             return json.dumps(fallback_response, ensure_ascii=False)
+
+    def _validate_response(self, response_text: str) -> str:
+        required = {
+            "diagnosis": str,
+            "FrequentlyVisitedAreas": list,
+            "solution": list,
+            "prevention": list,
+            "insight": str,
+        }
+
+        try:
+            data = json.loads(response_text)
+        except json.JSONDecodeError:
+            raise ValueError("Gemini response is not valid JSON")
+
+        for key, expected_type in required.items():
+            if key not in data or not isinstance(data[key], expected_type):
+                raise ValueError(f"Gemini response schema mismatch: {key}")
+
+        return json.dumps(data, ensure_ascii=False)
 
 rag_engine = RAGEngine()

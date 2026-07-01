@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.domains.auth.jwt_handler import verify_token
-from app.domains.user.schemas import UserOnboarding, UserProfileUpdate
+from app.domains.user.schemas import UserMeResponse, UserOnboarding, UserProfileUpdate
 from app.domains.user.service import UserService
 
 router = APIRouter()
@@ -34,6 +34,13 @@ async def onboarding(
 @router.get("/me")
 async def get_user_info(
     user_id: int = Depends(verify_token), 
+    db: AsyncSession = Depends(get_db)
+):
+    return await service.me(db, user_id)
+
+@router.get("/me-safe", response_model=UserMeResponse)
+async def get_safe_user_info(
+    user_id: int = Depends(verify_token),
     db: AsyncSession = Depends(get_db)
 ):
     return await service.me(db, user_id)

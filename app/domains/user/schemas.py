@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel
 from typing import Optional, Literal
+from datetime import datetime
 
 #
 #=============입력================
@@ -28,3 +29,21 @@ class UserProfileUpdate(BaseModel):
 #
 # ============출력===============
 #
+class UserMeResponse(BaseModel):
+    id: int
+    nickname: Optional[str] = None
+    window_direction: Optional[str] = None
+    underground: Optional[str] = None
+    address: Optional[str] = None
+    region_address: Optional[str] = None
+    grid_nx: Optional[int] = None
+    grid_ny: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    indoor_temp: Optional[float] = None
+    indoor_humidity: Optional[float] = None
+    notification_settings: Optional[bool] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

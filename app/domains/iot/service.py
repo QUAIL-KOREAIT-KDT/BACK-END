@@ -1,5 +1,7 @@
 # BACK-END/app/domains/iot/service.py
 
+import asyncio
+
 from tuya_connector import TuyaOpenAPI
 from app.core.config import settings
 from app.domains.iot.schemas import IotDeviceResponse
@@ -70,15 +72,21 @@ class IotService:
 
     async def get_devices(self) -> list[IotDeviceResponse]:
         """마스터 Tuya 계정에 등록된 기기 목록 조회"""
-        self._ensure_initialized()
+        await asyncio.to_thread(self._ensure_initialized)
 
-        response = self._api.get(f"/v1.0/users/{settings.TUYA_UID}/devices")
+        response = await asyncio.to_thread(
+            self._api.get,
+            f"/v1.0/users/{settings.TUYA_UID}/devices",
+        )
 
         # 토큰 만료 시 재연결 후 재시도
         if not response.get("success", False) and self._is_token_error(response):
             logger.warning(f"토큰 만료 감지, 재연결 시도: code={response.get('code')}")
-            self._reconnect()
-            response = self._api.get(f"/v1.0/users/{settings.TUYA_UID}/devices")
+            await asyncio.to_thread(self._reconnect)
+            response = await asyncio.to_thread(
+                self._api.get,
+                f"/v1.0/users/{settings.TUYA_UID}/devices",
+            )
 
         if not response.get("success", False):
             logger.error(f"기기 목록 조회 실패: {response}")
@@ -94,8 +102,9 @@ class IotService:
             # 기기 ON/OFF 상태 조회
             is_on = False
             try:
-                status_response = self._api.get(
-                    f"/v1.0/devices/{device_id}/status"
+                status_response = await asyncio.to_thread(
+                    self._api.get,
+                    f"/v1.0/devices/{device_id}/status",
                 )
                 if status_response.get("success"):
                     for status_item in status_response.get("result", []):
@@ -123,7 +132,7 @@ class IotService:
 
     async def control_device(self, device_id: str, turn_on: bool) -> bool:
         """기기 ON/OFF 제어"""
-        self._ensure_initialized()
+        await asyncio.to_thread(self._ensure_initialized)
 
         commands = {
             "commands": [
@@ -131,7 +140,8 @@ class IotService:
             ]
         }
 
-        response = self._api.post(
+        response = await asyncio.to_thread(
+            self._api.post,
             f"/v1.0/devices/{device_id}/commands",
             commands,
         )
@@ -139,8 +149,9 @@ class IotService:
         # 토큰 만료 시 재연결 후 재시도
         if not response.get("success", False) and self._is_token_error(response):
             logger.warning(f"토큰 만료 감지, 재연결 후 기기 제어 재시도: {device_id}")
-            self._reconnect()
-            response = self._api.post(
+            await asyncio.to_thread(self._reconnect)
+            response = await asyncio.to_thread(
+                self._api.post,
                 f"/v1.0/devices/{device_id}/commands",
                 commands,
             )

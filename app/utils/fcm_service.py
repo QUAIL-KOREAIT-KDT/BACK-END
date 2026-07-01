@@ -1,5 +1,6 @@
 # BACK-END/app/utils/fcm_service.py
 
+import asyncio
 import firebase_admin
 from firebase_admin import credentials, messaging
 from app.core.config import settings
@@ -95,7 +96,7 @@ class FCMService:
                 ),
             )
 
-            response = messaging.send(message)
+            response = await asyncio.to_thread(messaging.send, message)
             logger.info(f"✅ FCM 전송 성공: {response}")
             return True
 
@@ -152,7 +153,10 @@ class FCMService:
                 ),
             )
 
-            response = messaging.send_each_for_multicast(message)
+            response = await asyncio.to_thread(
+                messaging.send_each_for_multicast,
+                message,
+            )
             
             # 실패한 토큰 추출
             failed_tokens = []
