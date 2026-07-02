@@ -39,3 +39,4 @@ class HomeResponse(BaseModel):
     
     # [변경된 요구사항] 곰팡이 위험도 리스트 (최대, 최소, 현재)
     risk_forecast: List[MoldRiskItem] = []
+    risk_timeline: List[MoldRiskItem] = []

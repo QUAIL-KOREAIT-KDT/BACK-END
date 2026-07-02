@@ -87,6 +87,7 @@ class HomeService:
 
         # "오늘" 날짜 기준 (내일 00시 데이터는 통계에서 제외하고 Current용으로만 씀)
         today_day = now.day
+        hourly_risk_items = []
 
         for w in daily_weather_list:
             time_str = f"{w.date.hour:02d}:00"
@@ -110,6 +111,7 @@ class HomeService:
                 temp_used=risk_res["details"].get("t_in", 0.0),
                 humid_used=risk_res["details"].get("h_in", 0.0)
             )
+            hourly_risk_items.append(item)
 
             w_date_naive = w.date.replace(tzinfo=None) if w.date.tzinfo else w.date
 
@@ -185,7 +187,8 @@ class HomeService:
             region_address=address,
             current_weather=weather_details, 
             ventilation_times=ventilation_recs,
-            risk_forecast=final_risk_list
+            risk_forecast=final_risk_list,
+            risk_timeline=hourly_risk_items
         )
 
     def _get_empty_response(self, address="위치 정보 없음"):
