@@ -158,18 +158,22 @@ class HomeService:
             final_risk_list.append(fallback_item)
 
 
-        # 6. 날씨 정보 (Target Time 기준 1개)
+        # 6. 날씨 정보
+        # 기존 앱은 current_weather[0]만 사용하므로 배열 계약은 유지하고,
+        # 웹 대시보드는 00시-24시 타임라인을 그릴 수 있도록 하루치 데이터를 함께 내려준다.
         weather_details = []
-        if target_weather:
+        for w in daily_weather_list:
             cond = "쾌적"
-            if target_weather.humid > 70: cond = "습함"
-            elif target_weather.rain_prob > 0: cond = "비"
-            
+            if w.humid > 70:
+                cond = "습함"
+            elif w.rain_prob > 0:
+                cond = "비"
+
             weather_details.append(WeatherDetail(
-                time=f"{target_weather.date.hour:02d}:00",
-                temp=target_weather.temp,
-                humid=target_weather.humid,
-                rain_prob=target_weather.rain_prob,
+                time=f"{w.date.hour:02d}:00",
+                temp=w.temp,
+                humid=w.humid,
+                rain_prob=w.rain_prob,
                 condition=cond
             ))
 
