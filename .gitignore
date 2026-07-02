@@ -71,3 +71,4 @@ efficientnet_b0_mold_quantized.onnx
 # 로컬 개발 도구 산출물 (세션 상태/리뷰 DB 등)
 .omc/
 .code-review-graph/
+.serena/

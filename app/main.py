@@ -30,6 +30,7 @@ from app.domains.notification.router import router as notification_router
 from app.domains.iot.router import router as iot_router
 from app.domains.game.router import router as game_router
 from app.domains.system.router import router as system_router
+from app.domains.web.router import router as web_router
 
 # jwt 토큰 검증 테스트
 from app.domains.auth.jwt_handler import verify_token
@@ -68,6 +69,7 @@ app = FastAPI(
 origins = [
     "https://pangpangpangs.com",
     "https://www.pangpangpangs.com",
+    "http://localhost:3000",
     "http://localhost:8000", # 로컬 개발용 (필요시 추가)
 ]
 
@@ -102,6 +104,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # public 라우터
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(system_router, prefix="/api/system", tags=["System"])
+app.include_router(web_router, prefix="/api/web", tags=["Web"])
 
 
 # private 라우터
