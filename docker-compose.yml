@@ -42,6 +42,7 @@ services:
     mem_limit: 512m
     environment:
       NODE_ENV: production
+      HOSTNAME: 0.0.0.0
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
       NEXT_PUBLIC_WEB_BASE_URL: ${NEXT_PUBLIC_WEB_BASE_URL:-https://pangpangpangs.com}
       NEXT_PUBLIC_KAKAO_LOGIN_FLOW: ${NEXT_PUBLIC_KAKAO_LOGIN_FLOW:-redirect}
