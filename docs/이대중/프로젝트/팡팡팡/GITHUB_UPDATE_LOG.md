@@ -71,3 +71,18 @@
 - 운영 배포 여부: 아직 배포 전
 - 롤백 방법: manifest 및 문서/스크립트 변경 commit 되돌림
 - 주의사항: 새 프론트는 `404/405/501`에서 기존 endpoint fallback을 유지해야 함
+
+## 2026-07-02 - 웹 카카오 OAuth 환경변수 정합성 보강
+
+- 저장소: BACK-END
+- 브랜치: main
+- 커밋: 커밋 전
+- 작업자: Codex / 안재원
+- 변경 목적: 웹 카카오 로그인에서 카카오 콘솔의 Client Secret 사용 여부와 백엔드 code 교환 요청이 어긋나는 문제를 방지
+- 주요 변경: `KAKAO_CLIENT_SECRET` 선택 환경변수 추가, `/api/web/auth/kakao/code` 토큰 교환 시 값이 있으면 `client_secret` 포함
+- 출시 앱 호환성 영향: 기존 모바일 `POST /api/auth/kakao` 계약은 변경 없음. 웹 전용 `/api/web/auth/kakao/code`만 보강
+- DB/S3/Firebase 영향: 없음
+- 로컬 테스트: `/api/system/capabilities`, `/api/web/auth/kakao/authorize-url` 응답 확인. `app/core/config.py`, `app/domains/web/router.py` AST 문법 확인 및 `settings.KAKAO_REST_API_KEY` 로딩 확인
+- 운영 배포 여부: 운영 카카오 콘솔에서 Client Secret을 켰다면 운영 `.env`에도 `KAKAO_CLIENT_SECRET` 반영 후 재시작 필요
+- 롤백 방법: `KAKAO_CLIENT_SECRET` 설정과 토큰 payload 추가 변경을 이전 커밋으로 되돌림
+- 주의사항: 비밀값은 문서에 기록하지 않으며, Redirect URI는 프론트 `.env`와 Kakao Developers 설정이 정확히 일치해야 함

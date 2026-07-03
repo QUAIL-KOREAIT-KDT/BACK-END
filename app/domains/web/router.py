@@ -98,6 +98,8 @@ async def kakao_code_login(
         "redirect_uri": payload.redirect_uri,
         "code": payload.code,
     }
+    if settings.KAKAO_CLIENT_SECRET:
+        token_payload["client_secret"] = settings.KAKAO_CLIENT_SECRET
 
     async with httpx.AsyncClient(timeout=10) as client:
         token_response = await client.post(

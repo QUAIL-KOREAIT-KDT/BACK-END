@@ -88,6 +88,8 @@
 
 - [카카오 로그인] → [Redirect URI]
 - 예) `https://your-domain.com/auth/kakao/callback`
+- 로컬 웹 테스트: `http://localhost:3000/auth/kakao/callback`
+- 카카오 콘솔에서 Client Secret을 활성화했다면 백엔드 `.env`의 `KAKAO_CLIENT_SECRET`에도 같은 값을 설정
 
 ### 2.5 카카오 로그인 활성화
 

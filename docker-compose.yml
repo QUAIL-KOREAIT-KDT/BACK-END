@@ -3,6 +3,7 @@ services:
     image: mysql:8.0
     container_name: pangpang-mysql
     restart: unless-stopped
+    mem_limit: 512m
     environment:
       MYSQL_ROOT_PASSWORD: "1234"
       MYSQL_DATABASE: "quail_db"
@@ -23,6 +24,7 @@ services:
     image: pangpang-api:dev
     container_name: pangpang-api
     restart: unless-stopped
+    mem_limit: 1g
     env_file:
       - .env.compose
     volumes:
@@ -32,13 +34,32 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  web:
+    image: ${PANGPANG_WEB_IMAGE:-pangpang-web:local}
+    container_name: pangpang-web
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+      NEXT_PUBLIC_WEB_BASE_URL: ${NEXT_PUBLIC_WEB_BASE_URL:-https://pangpangpangs.com}
+      NEXT_PUBLIC_KAKAO_LOGIN_FLOW: ${NEXT_PUBLIC_KAKAO_LOGIN_FLOW:-redirect}
+      NEXT_PUBLIC_KAKAO_REDIRECT_URI: ${NEXT_PUBLIC_KAKAO_REDIRECT_URI:-https://pangpangpangs.com/auth/kakao/callback}
+      PANGPANG_BACKEND_ORIGIN: ${PANGPANG_BACKEND_ORIGIN:-http://api:8000}
+    expose:
+      - "3000"
+    depends_on:
+      - api
    
   nginx:
     image: nginx:alpine
     container_name: pangpang-nginx
     restart: unless-stopped
+    mem_limit: 128m
     depends_on:
       - api
+      - web
     ports:
       - "80:80"
       - "443:443"

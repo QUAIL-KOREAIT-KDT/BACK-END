@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     KMA_API_KEY: str 
     DATA_API_KEY: str
     KAKAO_REST_API_KEY: str
+    KAKAO_CLIENT_SECRET: str | None = None
 
     # JWT
     SECRET_KEY: str
