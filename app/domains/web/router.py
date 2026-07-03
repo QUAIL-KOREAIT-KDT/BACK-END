@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
@@ -34,6 +35,8 @@ router = APIRouter()
 kakao_client = KakaoClient()
 web_user_service = UserService()
 game_service = GameService()
+_diagnosis_guard_lock = asyncio.Lock()
+_diagnosis_users_in_flight: set[int] = set()
 
 
 def _dictionary_to_item(item: Dictionary) -> WebDictionaryItem:
@@ -249,21 +252,33 @@ async def web_predict_mold(
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files can be uploaded.")
 
-    service = DiagnosisService(db)
-    result = await service.diagnose_image(file, place, user_id)
-    return {
-        "id": result.id,
-        "result": result.result,
-        "confidence": result.confidence,
-        "image_path": result.image_path,
-        "gradcam_image_path": result.gradcam_image_path,
-        "bbox_coordinates": result.bbox_coordinates,
-        "mold_location": result.mold_location,
-        "created_at": result.created_at,
-        "model_solution": result.model_solution,
-        "web_next": {
-            "history": "/api/web/me/dashboard",
-            "detail": "/api/my_page/diagnosis-info/",
-            "share_link": f"/link/diagnosis/{result.id}",
-        },
-    }
+    async with _diagnosis_guard_lock:
+        if user_id in _diagnosis_users_in_flight:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Diagnosis is already running for this user.",
+            )
+        _diagnosis_users_in_flight.add(user_id)
+
+    try:
+        service = DiagnosisService(db)
+        result = await service.diagnose_image(file, place, user_id)
+        return {
+            "id": result.id,
+            "result": result.result,
+            "confidence": result.confidence,
+            "image_path": result.image_path,
+            "gradcam_image_path": result.gradcam_image_path,
+            "bbox_coordinates": result.bbox_coordinates,
+            "mold_location": result.mold_location,
+            "created_at": result.created_at,
+            "model_solution": result.model_solution,
+            "web_next": {
+                "history": "/api/web/me/dashboard",
+                "detail": "/api/my_page/diagnosis-info/",
+                "share_link": f"/link/diagnosis/{result.id}",
+            },
+        }
+    finally:
+        async with _diagnosis_guard_lock:
+            _diagnosis_users_in_flight.discard(user_id)
