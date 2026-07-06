@@ -125,6 +125,7 @@ sequenceDiagram
 | `GET` | `/api/web/me/dashboard` | 프로필, 진단 이력, 랭킹, 요약 통합 조회 |
 | `GET` | `/api/web/dictionary` | 웹 사전 목록/검색/필터 |
 | `GET` | `/api/web/dictionary/{id}` | 웹 사전 상세 |
+| `GET` | `/api/web/diagnosis/{id}/public` | 웹 공유 링크용 진단 공개 리포트 조회 |
 | `POST` | `/api/web/diagnosis/predict` | 웹 진단 업로드, 저장, 결과 반환 |
 
 ## 프로젝트 구조

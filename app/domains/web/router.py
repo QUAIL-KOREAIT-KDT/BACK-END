@@ -18,6 +18,7 @@ from app.domains.auth.jwt_handler import (
 from app.domains.auth.kakao_client import KakaoClient
 from app.domains.auth.router import user_service
 from app.domains.auth.schemas import AuthResponse
+from app.domains.diagnosis.models import Diagnosis
 from app.domains.diagnosis.service import DiagnosisService
 from app.domains.dictionary.models import Dictionary
 from app.domains.game.service import GameService
@@ -224,6 +225,34 @@ async def web_dictionary_detail(
     if not item:
         raise HTTPException(status_code=404, detail="Dictionary item not found.")
     return _dictionary_to_item(item)
+
+
+@router.get("/diagnosis/{diagnosis_id}/public", response_model=WebDiagnosisResult)
+async def web_public_diagnosis_detail(
+    diagnosis_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Diagnosis).where(Diagnosis.id == diagnosis_id))
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Diagnosis result not found.")
+
+    return {
+        "id": item.id,
+        "result": item.result,
+        "confidence": item.confidence,
+        "image_path": item.image_path,
+        "gradcam_image_path": item.gradcam_image_path,
+        "bbox_coordinates": item.bbox_coordinates,
+        "mold_location": item.mold_location,
+        "created_at": item.created_at,
+        "model_solution": item.model_solution,
+        "web_next": {
+            "login": "/auth/kakao/callback",
+            "diagnosis": "/app/diagnosis",
+            "dictionary": "/app/dictionary",
+        },
+    }
 
 
 @router.post("/diagnosis/predict", response_model=WebDiagnosisResult)
